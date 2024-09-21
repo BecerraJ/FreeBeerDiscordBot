@@ -371,7 +371,7 @@ namespace DNet_V3_Tutorial
       return 0;
     }
 
-    public void WriteToCSV(List<string> UsersList)
+    public static void WriteToCSV(List<string> UsersList)
     {
       var csv = new StringBuilder();
       foreach (var item in UsersList)

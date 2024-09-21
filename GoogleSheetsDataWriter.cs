@@ -483,9 +483,8 @@ namespace GoogleSheetsData
 
     public static async Task RenderPaychex(SocketInteractionContext a_socketInteraction)
     {
-
+      ulong paychexTemplateSheetID = ulong.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("paychexTemplateSheetID"));
       var serviceValues = GetSheetsService().Spreadsheets;
-
       SocketGuildUser socketGuildUser = (SocketGuildUser)a_socketInteraction.User;
 
       string lastSundayMonth = GoogleSheetHelperMethods.StartOfWeek(DateTime.Today, DayOfWeek.Sunday).ToShortMonthName();
@@ -497,38 +496,39 @@ namespace GoogleSheetsData
       if (!CheckIfSheetExists(paychexRenderedName))
       {
         BatchUpdateSpreadsheetRequest batchUpdateSpreadsheetRequest = new BatchUpdateSpreadsheetRequest();
-        batchUpdateSpreadsheetRequest.Requests = new List<Request>();
-
-        batchUpdateSpreadsheetRequest.Requests.Add(new Request()
-        {
-          DuplicateSheet = new DuplicateSheetRequest()
+        batchUpdateSpreadsheetRequest.Requests =
+        [
+          new Request()
           {
-            NewSheetName = paychexRenderedName,
-            SourceSheetId = 887023490
+            DuplicateSheet = new DuplicateSheetRequest()
+            {
+              NewSheetName = paychexRenderedName,
+              SourceSheetId = (int?)paychexTemplateSheetID
 
+            },
           },
-        });
+        ];
 
         var req = serviceValues.BatchUpdate(batchUpdateSpreadsheetRequest, RegearSheetID);  //public SheetsService Service; property of parent class
         BatchUpdateSpreadsheetResponse response = req.Execute();
 
         List<object> DaterowValues = serviceValues.Values.Get(RegearSheetID, "Payouts!3:3").Execute().Values.FirstOrDefault().ToList();
-        IList<IList<object>> rowValues = serviceValues.Values.Get(RegearSheetID, $"Payouts!R3C2:R350C{DaterowValues.Count}").Execute().Values;
+        //IList<IList<object>> rowValues = serviceValues.Values.Get(RegearSheetID, $"Payouts!R3C2:R350C{DaterowValues.Count}").Execute().Values;
 
-        List<string> GuildMembersNames = null;
-        List<int> GuildMembersAmounts = null;
+        //List<string> GuildMembersNames = null;
+        //List<int> GuildMembersAmounts = null;
 
         var numberOfGuildMembers = serviceValues.Values.Get(RegearSheetID, "Payouts!B4:B").Execute().Values;
         var dateRowValues = serviceValues.Values.Get(RegearSheetID, "Payouts!3:3").Execute().Values.FirstOrDefault().ToList();
         //var testPaymentAmounts = serviceValues.Values.Get(RegearSheetID, "Payouts!B4:B").Execute().Values;
 
 
-        DateTime lastSundayPaychexDate = GoogleSheetHelperMethods.StartOfWeek(DateTime.Today, DayOfWeek.Sunday);
-        string shortmonth = DateTime.Now.ToShortMonthName();
+        //DateTime lastSundayPaychexDate = GoogleSheetHelperMethods.StartOfWeek(DateTime.Today, DayOfWeek.Sunday);
+        //string shortmonth = DateTime.Now.ToShortMonthName();
 
         string combinedDate = $"{lastSundayMonth}-{lastSunday}";//This gets the running total
-        List<string> paychexData = new List<string>();
-        List<string> row2 = new List<string>();
+        //List<string> paychexData = new List<string>();
+        //List<string> row2 = new List<string>();
 
 
 

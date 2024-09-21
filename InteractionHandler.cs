@@ -16,6 +16,7 @@ using Aspose.Imaging.AsyncTask;
 using Aspose.Imaging.ProgressManagement;
 using DiscordBot;
 using DNet_V3_Tutorial;
+using DiscordBot.Services;
 
 namespace InteractionHandlerService
 {
@@ -147,9 +148,10 @@ namespace InteractionHandlerService
 
         SocketGuildUser user = (SocketGuildUser)SocketUser;
 
-        if (!SocketUser.IsBot && user.Roles.Any(x => x.Id == 9823749544))
+        if (!SocketUser.IsBot && await new DataBaseService().CheckPlayerIsExist(SocketUser.Username))
         {
-          //await CommandModule.CommandModule.Unregister(user.Username.ToString(), "Left guild or someone kicked because they were annoyed", user);
+          //await CommandModule.CommandModule.Unregister(user.Username.ToString(), user);
+          //await new DataBaseService().unre
         }
         Random probability = new Random();
         Random gifRandom = new Random();
@@ -184,11 +186,11 @@ namespace InteractionHandlerService
           await lobbyChannel.SendMessageAsync($"<@{SocketUser.Id}> / {SocketUser.Username} has left the server");
         }
       }
-      else if (SocketGuild.Id == AllianceGuildID)
-      {
-        var lobbyChannel = _client.GetChannel(1128713631132033154) as IMessageChannel;
-        await lobbyChannel.SendMessageAsync($"Has left the server <@{SocketUser.GlobalName}>");
-      }
+      //else if (SocketGuild.Id == AllianceGuildID)
+      //{
+      //  var lobbyChannel = _client.GetChannel(1128713631132033154) as IMessageChannel;
+      //  await lobbyChannel.SendMessageAsync($"Has left the server <@{SocketUser.GlobalName}>");
+      //}
     }
     private Task MenuHandler(SocketMessageComponent arg)
     {

@@ -1,6 +1,5 @@
 ﻿using DiscordBot.Enums;
 using DiscordBot.Models;
-using Google.Apis.Sheets.v4.Data;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -46,6 +45,11 @@ namespace DiscordBot.Services
       await freeBeerdbContext.SaveChangesAsync();
     }
 
+    public List<Player> GetRegisteredPlayerRoster()
+    {
+      //var somethinglist = freeBeerdbContext.Player.ToList();
+      return freeBeerdbContext.Player.ToList();
+    }
     public async Task<Boolean> CheckPlayerIsExist(string playerName)
     {
       return await freeBeerdbContext.Player.AnyAsync(x => x.PlayerName.ToLower() == playerName.ToLower());
@@ -91,6 +95,16 @@ namespace DiscordBot.Services
     public Player GetPlayerInfoByName(string playerName)
     {
       return freeBeerdbContext.Player.AsQueryable().Where(x => x.PlayerName == playerName).FirstOrDefault();
+
+    }
+    public void DeletePlayer(string a_sPlayerName)
+    {
+      Player PlayerName = freeBeerdbContext.Player.AsQueryable().Where(x => x.PlayerName == a_sPlayerName).FirstOrDefault();
+      if (PlayerName != null)
+      {
+        freeBeerdbContext.Player.Remove(PlayerName);
+        freeBeerdbContext.SaveChanges();
+      }
 
     }
     public void DeletePlayerLootByKillId(string killID)

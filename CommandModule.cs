@@ -1,5 +1,4 @@
 ﻿using Discord;
-using Discord.Commands;
 using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordBot.Enums;
@@ -11,8 +10,6 @@ using DiscordbotLogging.Log;
 using FreeBeerBot;
 using GoogleSheetsData;
 using MarketData;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json.Linq;
 using PlayerData;
 using SharpLink;
@@ -23,16 +20,9 @@ using System.Linq;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using AlbionData.Models;
 using DiscordBot;
-using Discord.Rest;
-using Aspose.Words.Drawing;
 using System.Globalization;
-using Microsoft.Extensions.FileSystemGlobbing;
-using System.Threading.Channels;
-using static DiscordBot.GuildDataHandler;
-using Microsoft.VisualBasic;
-using static PlayerData.PlayerDataHandler;
+using DNet_V3_Tutorial;
 
 namespace CommandModule
 {
@@ -63,7 +53,7 @@ namespace CommandModule
     private ulong SilverTierRegearID = ulong.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("SilverTierRegear"));
     private ulong BronzeTierRegearID = ulong.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("BronzeTierRegear"));
     private ulong FreeTierRegearID = ulong.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("FreeTierRegear"));
-    private ulong ApplicantRoleID = 1156954659525771344;
+    private ulong ApplicantRoleID = 335894631810334720;
 
     private int iMiniMartAccountCap = int.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("MiniMartAccountCap"));
     private string FreeBeerAPIGuildID = System.Configuration.ConfigurationManager.AppSettings.Get("FreeBeerGuildAPIID");
@@ -121,52 +111,55 @@ namespace CommandModule
       PlayerDataHandler playerDataHandler = new PlayerDataHandler();
       PlayerLookupInfo playerInfo = new PlayerLookupInfo();
       PlayerDataLookUps albionData = new PlayerDataLookUps();
-      dataBaseService = new DataBaseService();
+      DataBaseService dataBaseService = new DataBaseService();
+      IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
 
       string? sUserNickname = (guildUserName.DisplayName == null) ? guildUserName.Username : guildUserName.DisplayName;
-
       var freeBeerMainChannel = Context.Client.GetChannel(739949855195267174) as IMessageChannel;
       var newMemberRole = guildUserName.Guild.GetRole(NewRecruitRoleID);
       var freeRegearRole = guildUserName.Guild.GetRole(FreeTierRegearID);//free regear role id
-
       var user = guildUserName.Guild.GetUser(guildUserName.Id);
 
-      if (user.Nickname == null)
+      if (!await dataBaseService.CheckPlayerIsExist(sUserNickname))
       {
-        try
+
+        if (user.Nickname == null)
         {
-          await user.ModifyAsync(x => x.Nickname = ingameName);
+          try
+          {
+            await user.ModifyAsync(x => x.Nickname = ingameName);
+          }
+          catch (Exception ex)
+          {
+            await FollowupAsync($"{ingameName} Error: Unable to udpate player server name. Run command again or register them by hand. <@{OfficerRoleID}> This person may need to be added to the spreadsheets", null, false, true);
+            await _logger.Log(new LogMessage(LogSeverity.Info, "Register Member", $"User: {Context.User.Username} nickname couldn't be updated", null));
+          }
         }
-        catch (Exception ex) 
+
+        playerInfo = await albionData.GetPlayerInfo(Context, sUserNickname);
+
+        if (sUserNickname.ToLower() == playerInfo.Name.ToLower() && playerInfo != null)
         {
-          await _logger.Log(new LogMessage(LogSeverity.Info, "Register Member", $"User: {Context.User.Username} nickname couldn't be updated", null));
-        }
-      }
+          await dataBaseService.AddPlayerInfo(new DiscordBot.Models.Player
+          {
+            PlayerId = playerInfo.Id,
+            PlayerName = playerInfo.Name
+          });
 
-      playerInfo = await albionData.GetPlayerInfo(Context, sUserNickname);
+          await user.AddRoleAsync(newMemberRole);
+          //await user.AddRoleAsync(freeRegearRole);
 
-      if (sUserNickname.ToLower() == playerInfo.Name.ToLower() && playerInfo != null)
-      {
-        await dataBaseService.AddPlayerInfo(new DiscordBot.Models.Player
-        {
-          PlayerId = playerInfo.Id,
-          PlayerName = playerInfo.Name
-        });
+          await _logger.Log(new LogMessage(LogSeverity.Info, "Register Member", $"User: {Context.User.Username} has registered {playerInfo.Name}, Command: register", null));
 
-        await user.AddRoleAsync(newMemberRole);
-        //await user.AddRoleAsync(freeRegearRole);
+          await GoogleSheetsDataWriter.RegisterUserToDataRoster(playerInfo.Name.ToString(), ingameName, null, null, null);
+          await GoogleSheetsDataWriter.RegisterUserToRegearSheets(guildUserName, ingameName, null, null, null);
 
-        await _logger.Log(new LogMessage(LogSeverity.Info, "Register Member", $"User: {Context.User.Username} has registered {playerInfo.Name}, Command: register", null));
+          var embed = new EmbedBuilder()
+         .WithTitle($":beers: WELCOME TO FREE BEER :beers:")
+         .WithDescription("We're glad to have you. Please read the following below.")
+         .AddField($"Rules", "<#1261875306575298620>");
 
-        await GoogleSheetsDataWriter.RegisterUserToDataRoster(playerInfo.Name.ToString(), ingameName, null, null, null);
-        await GoogleSheetsDataWriter.RegisterUserToRegearSheets(guildUserName, ingameName, null, null, null);
-
-        var embed = new EmbedBuilder()
-       .WithTitle($":beers: WELCOME TO FREE BEER :beers:") 
-       .WithDescription("We're glad to have you. Please read the following below.")
-       .AddField($"Rules", "<#1261875306575298620>");
-
-        List<string> questionList = new List<string>
+          List<string> questionList = new List<string>
                 {
                     $"food",
                     $"weapon in Albion",
@@ -180,18 +173,23 @@ namespace CommandModule
                     $"TV show",
                     $"Sports team"
                 };
-        Random rnd = new Random();
-        int r = rnd.Next(questionList.Count);
-        await freeBeerMainChannel.SendMessageAsync($"<@{Context.Guild.GetUser(guildUserName.Id).Id}> Make to sure read the info below but.... We want to get to know you! Tell us... What's your favorite {(string)questionList[r]}?", false, embed.Build());
+          Random rnd = new Random();
+          int r = rnd.Next(questionList.Count);
+          await freeBeerMainChannel.SendMessageAsync($"<@{Context.Guild.GetUser(guildUserName.Id).Id}> Make to sure read the info below but.... We want to get to know you! Tell us... What's your favorite {(string)questionList[r]}?", false, embed.Build());
 
-        await FollowupAsync($"{ingameName} was registered", null, false, true);
+          await FollowupAsync($"{ingameName} was registered", null, false, true);
 
-        IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
-        await RecruitersModChannel.SendMessageAsync($"{ingameName} has been manually registered by {(Context.User as SocketGuildUser).Nickname} ");
+          
+          await RecruitersModChannel.SendMessageAsync($"{ingameName} has been manually registered by {(Context.User as SocketGuildUser).Nickname} ");
+        }
+        else
+        {
+          await RespondAsync($"Player not found. The users discord may not match the ingame name. Please try again", null, false, true);
+        }
       }
       else
       {
-        await RespondAsync($"Player not found. The users discord may not match the ingame name. Please try again", null, false, true);
+        await FollowupAsync($"{ingameName} has been already registered. If this isn't correct let an Officer know.", null, false, true);
       }
 
     }
@@ -200,6 +198,7 @@ namespace CommandModule
     {
       PlayerDataLookUps albionData = new PlayerDataLookUps();
       PlayerLookupInfo playerInfo = new PlayerLookupInfo();
+      DataBaseService dataBaseService = new DataBaseService();
 
       await DeferAsync(true);
 
@@ -207,7 +206,16 @@ namespace CommandModule
 
       if (playerInfo != null || DiscordUser != null)
       {
-        await GoogleSheetsDataWriter.UnResgisterUserFromDataSources(InGameName, DiscordUser);
+        try
+        {
+          await GoogleSheetsDataWriter.UnResgisterUserFromDataSources(InGameName, DiscordUser);
+          dataBaseService.DeletePlayer(InGameName);
+        }
+        catch
+        {
+          await FollowupAsync($"Issue unregistering {InGameName}. Please notify Officer/Admin", ephemeral: true);
+        }
+
 
         if (DiscordUser != null)
         {
@@ -220,7 +228,6 @@ namespace CommandModule
           }
         }
 
-        //TODO: REMOVE PLAYER FROM DATABASE HERE
         await _logger.Log(new LogMessage(LogSeverity.Info, "Unregister ", $"User: {Context.User.Username} has used command Unregister", null));
 
         IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
@@ -232,8 +239,27 @@ namespace CommandModule
       {
         await FollowupAsync("Member was not found while trying to unregister", null, false, true);
       }
+    }
 
+    [SlashCommand("view-roster", "View members that are reigstered to the guild")]
+    public async Task ViewGuildRoster()
+    {
+      DataBaseService DataBaseService= new DataBaseService();
 
+      await DeferAsync(true);
+
+      List<Player> GuildRosterList = DataBaseService.GetRegisteredPlayerRoster();
+      List<string> formattedPlayerList = new List<string>();
+
+      foreach (Player player in GuildRosterList)
+      {
+        //embed.AddField("Name", player.PlayerName);
+        formattedPlayerList.Add(player.PlayerName);
+      }
+
+      PingModule.WriteToCSV(formattedPlayerList);
+
+      await FollowupWithFileAsync(@".\Files\PurgeList.csv", "PlayerRoster.csv", "Roster Generated");
     }
 
     [SlashCommand("give-regear", "Assign users regear roles")]
@@ -619,13 +645,13 @@ namespace CommandModule
           }
         }
       }
-      //await FollowupAsync($"{i} Free Beer members have been logged");
+      await FollowupAsync($"{i} Free Beer members have been logged");
     }
 
     [SlashCommand("view-player-paychex", "View someones paychex info")]
     public async Task ViewMembersPaychex(SocketGuildUser GuildUser)
     {
-      await DeferAsync();
+      await DeferAsync(true);
 
       Dictionary<string, string> paychexTotals = GoogleSheetsDataWriter.GetPaychexTotals(GuildUser.Nickname);
       int iGrandTotalPaychex = 0;
@@ -641,7 +667,7 @@ namespace CommandModule
         }
       }
 
-      await FollowupAsync($"{GuildUser.Nickname} total is {iGrandTotalPaychex}");
+      await FollowupAsync($"{GuildUser.Nickname} total is {iGrandTotalPaychex}", ephemeral: true);
     }
 
     [SlashCommand("mm-transaction", "Submit transaction to Mini-mart")]
@@ -1376,7 +1402,6 @@ namespace CommandModule
 
       var socketUser = (SocketGuildUser)Context.User;
       IComponentInteraction ButtonInteraction = Context.Interaction as IComponentInteraction;
-
       IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
 
       if (HelperMethods.IsUserFreeBeerMember(socketUser))
