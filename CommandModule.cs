@@ -12,7 +12,6 @@ using GoogleSheetsData;
 using MarketData;
 using Newtonsoft.Json.Linq;
 using PlayerData;
-using SharpLink;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -23,6 +22,8 @@ using System.Threading.Tasks;
 using DiscordBot;
 using System.Globalization;
 using DNet_V3_Tutorial;
+using System.Threading.Channels;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion.Internal;
 
 namespace CommandModule
 {
@@ -33,7 +34,7 @@ namespace CommandModule
 
     private ulong GuildID = ulong.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("FreeBeerDiscordGuildID"));
     private static Logger _logger;
-    private DataBaseService dataBaseService;
+    //private DataBaseService dataBaseService;
     private static LootSplitModule lootSplitModule;
 
     private int iRegearLimit = int.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("RegearSubmissionCap"));
@@ -111,16 +112,16 @@ namespace CommandModule
       PlayerDataHandler playerDataHandler = new PlayerDataHandler();
       PlayerLookupInfo playerInfo = new PlayerLookupInfo();
       PlayerDataLookUps albionData = new PlayerDataLookUps();
-      DataBaseService dataBaseService = new DataBaseService();
+      //DataBaseService dataBaseService = new DataBaseService();
       IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
 
       string? sUserNickname = (guildUserName.DisplayName == null) ? guildUserName.Username : guildUserName.DisplayName;
       var freeBeerMainChannel = Context.Client.GetChannel(739949855195267174) as IMessageChannel;
-      var newMemberRole = guildUserName.Guild.GetRole(NewRecruitRoleID);
+      var newMemberRole = guildUserName.Guild.GetRole(MemberRoleID);
       var freeRegearRole = guildUserName.Guild.GetRole(FreeTierRegearID);//free regear role id
       var user = guildUserName.Guild.GetUser(guildUserName.Id);
 
-      if (!await dataBaseService.CheckPlayerIsExist(sUserNickname))
+      if (!user.Roles.Any(r => r.Id == MemberRoleID))
       {
 
         if (user.Nickname == null)
@@ -138,16 +139,15 @@ namespace CommandModule
 
         playerInfo = await albionData.GetPlayerInfo(Context, sUserNickname);
 
-        if (sUserNickname.ToLower() == playerInfo.Name.ToLower() && playerInfo != null)
+        if (playerInfo != null && sUserNickname.ToLower() == playerInfo.Name.ToLower() )
         {
-          await dataBaseService.AddPlayerInfo(new DiscordBot.Models.Player
-          {
-            PlayerId = playerInfo.Id,
-            PlayerName = playerInfo.Name
-          });
+          //await dataBaseService.AddPlayerInfo(new DiscordBot.Models.Player
+          //{
+          //  PlayerId = playerInfo.Id,
+          //  PlayerName = playerInfo.Name
+          //});
 
           await user.AddRoleAsync(newMemberRole);
-          //await user.AddRoleAsync(freeRegearRole);
 
           await _logger.Log(new LogMessage(LogSeverity.Info, "Register Member", $"User: {Context.User.Username} has registered {playerInfo.Name}, Command: register", null));
 
@@ -453,8 +453,9 @@ namespace CommandModule
       var component = new ComponentBuilder();
       var paychexbutton = new ButtonBuilder();
       DataBaseService dataBaseService = new DataBaseService();
-      
-      if(await dataBaseService.CheckPlayerIsExist(sUserNickname))
+      var socketUser = (SocketGuildUser)Context.User;
+
+      if (socketUser.Roles.Any(r => r.Id == MemberRoleID) || socketUser.Roles.Any(r => r.Id == OfficerRoleID))
       {
         await DeferAsync(true);
         List<string> paychexRunningTotal = GoogleSheetsDataWriter.GetRunningPaychexTotal(sUserNickname);
@@ -463,7 +464,6 @@ namespace CommandModule
         string miniMarketCreditsTotal = GoogleSheetsDataWriter.GetMiniMarketCredits(sUserNickname) ?? "0";
         //string regearStatus = GoogleSheetsDataWriter.GetRegearStatus(sUserNickname); DISABLED
         string PaychexDate = "";
-        //List<string> paychexSheets = GoogleSheetsDataWriter.GetPaychexSheets();
         var embed = new EmbedBuilder();
         int iGrandTotalPaychex = 0;
 
@@ -516,11 +516,18 @@ namespace CommandModule
               paychexbutton.IsDisabled = true;
             }
 
-            if (int.Parse(miniMarketCreditsTotal, NumberStyles.Currency) > iMiniMartAccountCap)
+            if (miniMarketCreditsTotal != "$0 (NOT ENROLLED)" && int.Parse(miniMarketCreditsTotal, NumberStyles.Currency) > iMiniMartAccountCap)
             {
               paychexbutton.Style = ButtonStyle.Danger;
               paychexbutton.IsDisabled = true;
               paychexbutton.Label = $"Credits Exceed Cap {PaychexDate.Split("(")[0]}";
+              paychexbutton.CustomId = $"Paychex{entries.Key}";
+            }
+            else 
+            {
+              paychexbutton.Style = ButtonStyle.Danger;
+              paychexbutton.IsDisabled = true;
+              paychexbutton.Label = $"Disabled - Not Enrolled in Mini-mart";
               paychexbutton.CustomId = $"Paychex{entries.Key}";
             }
             component.WithButton(paychexbutton);
@@ -549,6 +556,7 @@ namespace CommandModule
     public async Task TransferPaychexButton()
     {
       string? sUserNickname = ((Context.User as SocketGuildUser).DisplayName != null) ? new PlayerDataLookUps().CleanUpShotCallerName((Context.User as SocketGuildUser).DisplayName) : (Context.User as SocketGuildUser).Username;
+      string miniMarketCreditsTotal = GoogleSheetsDataWriter.GetMiniMarketCredits(sUserNickname) ?? "0";
       IComponentInteraction ButtonInteraction = Context.Interaction as IComponentInteraction;
 
       await DeferAsync(true);
@@ -562,42 +570,52 @@ namespace CommandModule
         var paychexbutton = new ButtonBuilder();
         var component = new ComponentBuilder();
 
-        foreach (var button in previousButtons.ActionRows.FirstOrDefault().Components)
+        if (int.Parse(miniMarketCreditsTotal, NumberStyles.Currency) < iMiniMartAccountCap)
         {
-          if (button.CustomId == ButtonInteraction.Data.CustomId)
-          {
-            paychexbutton.Style = ButtonStyle.Danger;
-            paychexbutton.IsDisabled = true;
-            paychexbutton.Label = $"Claimed {PaychexDate}";
-            paychexbutton.CustomId = $"Claimed-{PaychexDate}-{sUserNickname}";
-
-            component.WithButton(paychexbutton);
-          }
-          else
+          foreach (var button in previousButtons.ActionRows.FirstOrDefault().Components)
           {
 
-            if (component.ActionRows != null)
+            if (button.CustomId == ButtonInteraction.Data.CustomId)
             {
-              component.ActionRows.FirstOrDefault().AddComponent(button);
+              paychexbutton.Style = ButtonStyle.Danger;
+              paychexbutton.IsDisabled = true;
+              paychexbutton.Label = $"Claimed {PaychexDate}";
+              paychexbutton.CustomId = $"Claimed-{PaychexDate}-{sUserNickname}";
+
+              component.WithButton(paychexbutton);
             }
             else
             {
-              var newActionRows = new List<ActionRowBuilder>();
-              newActionRows.Add(new ActionRowBuilder());
-              newActionRows.FirstOrDefault().AddComponent(button);
-              component.ActionRows = newActionRows;
+
+              if (component.ActionRows != null)
+              {
+                component.ActionRows.FirstOrDefault().AddComponent(button);
+              }
+              else
+              {
+                var newActionRows = new List<ActionRowBuilder>();
+                newActionRows.Add(new ActionRowBuilder());
+                newActionRows.FirstOrDefault().AddComponent(button);
+                component.ActionRows = newActionRows;
+              }
             }
           }
+          await Context.Interaction.ModifyOriginalResponseAsync((x) =>
+          {
+            x.Components = component.Build();
+          });
+
+          await GoogleSheetsDataWriter.TransferPaychexToMiniMartCredits(Context.User as SocketGuildUser, PaychexDate);
+
+          await FollowupAsync($"Transfer Complete!", null, false, true);
         }
-
-        await Context.Interaction.ModifyOriginalResponseAsync((x) =>
+        else
         {
-          x.Components = component.Build();
-        });
+          await FollowupAsync($"Sorry can't transfer your credits. You're at or exceeded the account limit of 15 million", null, false, true);
+        }
+        
 
-        await GoogleSheetsDataWriter.TransferPaychexToMiniMartCredits(Context.User as SocketGuildUser, PaychexDate);
-
-        await FollowupAsync($"Transfer Complete!", null, false, true);
+       
       }
     }
 
@@ -626,20 +644,20 @@ namespace CommandModule
           {
             var detailedplayerinfo = await albionData.GetDetailedAlbionPlayerInfo(playerInfo.Id);
 
-            dataBaseService = new DataBaseService();
-            await dataBaseService.LogPlayerInfo(new LoggedPlayerInfo
-            {
-              PlayerId = detailedplayerinfo.Id,
-              PlayerName = detailedplayerinfo.Name,
-              GuildID = detailedplayerinfo.GuildId,
-              DeathFame = detailedplayerinfo.DeathFame,
-              KillFame = detailedplayerinfo.KillFame,
-              FameRatio = (float)detailedplayerinfo.FameRatio,
-              PVEFame = detailedplayerinfo.LifetimeStatistics.PvE.Total,
-              GatheringFame = detailedplayerinfo.LifetimeStatistics.Gathering.All.Total,
-              CraftingFame = detailedplayerinfo.LifetimeStatistics.Crafting.Total,
-              RecordedDate = DateTime.Today
-            });
+            //dataBaseService = new DataBaseService();
+            //await dataBaseService.LogPlayerInfo(new LoggedPlayerInfo
+            //{
+            //  PlayerId = detailedplayerinfo.Id,
+            //  PlayerName = detailedplayerinfo.Name,
+            //  GuildID = detailedplayerinfo.GuildId,
+            //  DeathFame = detailedplayerinfo.DeathFame,
+            //  KillFame = detailedplayerinfo.KillFame,
+            //  FameRatio = (float)detailedplayerinfo.FameRatio,
+            //  PVEFame = detailedplayerinfo.LifetimeStatistics.PvE.Total,
+            //  GatheringFame = detailedplayerinfo.LifetimeStatistics.Gathering.All.Total,
+            //  CraftingFame = detailedplayerinfo.LifetimeStatistics.Crafting.Total,
+            //  RecordedDate = DateTime.Today
+            //});
 
             i++;
           }
@@ -768,17 +786,17 @@ namespace CommandModule
 
       if (guildUser.Roles.Any(r => r.Id == OfficerRoleID || r.Id == ManagementRoleID) || bRegearAllowed)
       {
-        dataBaseService = new DataBaseService();
-        await dataBaseService.AddPlayerInfo(new DiscordBot.Models.Player
-        {
-          PlayerId = PlayerEventData.Victim.Id,
-          PlayerName = PlayerEventData.Victim.Name
-        });
+        //dataBaseService = new DataBaseService();
+        //await dataBaseService.AddPlayerInfo(new DiscordBot.Models.Player
+        //{
+        //  PlayerId = PlayerEventData.Victim.Id,
+        //  PlayerName = PlayerEventData.Victim.Name
+        //});
 
-        if (!await dataBaseService.PlayerReachRegearCap(sUserNickname, iRegearLimit) || guildUser.Roles.Any(r => r.Id == OfficerRoleID))
-        {
-          if (!await dataBaseService.CheckKillIdIsRegeared(EventID.ToString()))
-          {
+        //if (!await dataBaseService.PlayerReachRegearCap(sUserNickname, iRegearLimit) || guildUser.Roles.Any(r => r.Id == OfficerRoleID))
+        //{
+          //if (!await dataBaseService.CheckKillIdIsRegeared(EventID.ToString()))
+          //{
             if (PlayerEventData != null)
             {
               var moneyType = (MoneyTypes)Enum.Parse(typeof(MoneyTypes), "ReGear");
@@ -799,16 +817,16 @@ namespace CommandModule
                 await _logger.Log(new LogMessage(LogSeverity.Info, "Regear Submit", $"User: {Context.User.Username}, Tried submitting regear for {PlayerEventData.Victim.Name}", null));
               }
             }
-            else
-            {
-              await RespondAsync("Event info not found. Please verify Kill ID or event has expired.", null, false, true);
-            }
-          }
-          else
-          {
-            await RespondAsync($"You dumbass <@{Context.User.Id}>. Don't try to scam the guild and steal money. You can't submit another regear for same death. :middle_finger: ", null, false, true);
-          }
-        }
+            //else
+            //{
+            //  await RespondAsync("Event info not found. Please verify Kill ID or event has expired.", null, false, true);
+            //}
+          //}
+          //else
+          //{
+          //  await RespondAsync($"You dumbass <@{Context.User.Id}>. Don't try to scam the guild and steal money. You can't submit another regear for same death. :middle_finger: ", null, false, true);
+          //}
+        //}
         else
         {
           await RespondAsync($"Woah woah waoh there <@{Context.User.Id}>.....I'm cutting you off. You already submitted 5 regears today. Time to use the eco money you don't have. You can't claim more than 5 regears in a day", null, false, false);
@@ -830,16 +848,16 @@ namespace CommandModule
 
       if (RegearModule.HasRegearOverride(guildUser) || (sSelectedMentor != null && RegearModule.ISUserMentor(guildUser) && sSelectedMentor.ToLower() == sUserNickname.ToLower()) || victimName.ToLower() == guildUser.DisplayName.ToLower())
       {
-        dataBaseService = new DataBaseService();
+        //dataBaseService = new DataBaseService();
 
-        try
-        {
-          dataBaseService.DeletePlayerLootByKillId(killId.ToString());
-        }
-        catch (Exception ex)
-        {
-          Console.WriteLine(ex.ToString() + " ERROR DELETING RECORD FROM DATABASE");
-        }
+        //try
+        //{
+        //  dataBaseService.DeletePlayerLootByKillId(killId.ToString());
+        //}
+        //catch (Exception ex)
+        //{
+        //  Console.WriteLine(ex.ToString() + " ERROR DELETING RECORD FROM DATABASE");
+        //}
 
         if (victimName.ToLower() != guildUser.DisplayName.ToLower() && RegearModule.HasRegearOverride(guildUser))
         {
@@ -1066,11 +1084,11 @@ namespace CommandModule
 
       if (guildUser.Roles.Any(r => r.Id == ManagementRoleID || r.Id == OfficerRoleID) || regearPoster == guildUser.Id)
       {
-        dataBaseService = new DataBaseService();
+        //dataBaseService = new DataBaseService();
 
         try
         {
-          dataBaseService.DeletePlayerLootByQueueId(iQueueID.ToString());
+          //dataBaseService.DeletePlayerLootByQueueId(iQueueID.ToString());
           var guildUsertest = Context.Guild.GetUser(regearPoster);
 
           //var mb = new ModalBuilder()
@@ -1107,65 +1125,60 @@ namespace CommandModule
       }
     }
 
-    [SlashCommand("play-song", "Play a song test")]
-    public async Task PlaySong(string searchQuery)
+    //[SlashCommand("play-song", "Play a song test")]
+    //public async Task PlaySong(string searchQuery)
+    //{
+      
+    //}
+
+    //[SlashCommand("stop-song", "stop a song ")]
+    //public async Task StopSong()
+    //{
+
+    //}
+
+    //[SlashCommand("set-volume", "Volume between 1 - 100")]
+    //public async Task SetVolumne(uint volume)
+    //{
+      
+
+    //}
+    //[SlashCommand("clear-songs", "Clear the songs queue")]
+    //public async Task ClearQueue()
+    //{
+
+    //}
+
+    [SlashCommand("get-attendes", "Get list of people in current chat channel.")]
+    public async Task GetListOfAttendees()
     {
-      //TODO: Switch to VICTORIA for music https://github.com/Yucked/Victoria/wiki/%F0%9F%A7%AC-Samples
-      await DeferAsync();
-      IVoiceChannel voiceChannel = ((IGuildUser)Context.User).VoiceChannel;
+      var guildUser = (SocketGuildUser)Context.User;
 
-      LavalinkPlayer player = Program.lavalinkManager.GetPlayer(GuildID) ?? await Program.lavalinkManager.JoinAsync(voiceChannel);
-      LoadTracksResponse response = null;
-
-      var TodaysDate = DateTime.Today;
-
-      //response = await Program.lavalinkManager.GetTracksAsync($"ytsearch:{searchQuery}");
-      response = await Program.lavalinkManager.GetTracksAsync($"scsearch:{searchQuery}");
-      //response = await Program.lavalinkManager.GetTracksAsync($"ytmsearch:{SongName}");
-
-      // Gets the first track from the response
-      LavalinkTrack track = response.Tracks.First();
-      await player.PlayAsync(track);
-
-      await FollowupAsync($"Playing song: {player.CurrentTrack.Url}");
-    }
-
-    [SlashCommand("stop-song", "stop a song ")]
-    public async Task StopSong()
-    {
-
-      var player = Program.lavalinkManager.GetPlayer(Context.Guild.Id) ??
-      await Program.lavalinkManager.JoinAsync((Context.User as IGuildUser)?.VoiceChannel);
-      await player.StopAsync();
-      await RespondAsync("Stopped playing. Your queue is still intact though. Use `clear` to Destroy Queue", ephemeral: true);
-    }
-
-    [SlashCommand("set-volume", "Volume between 1 - 100")]
-    public async Task SetVolumne(uint volume)
-    {
-      if (volume > 111)
+      if(guildUser.VoiceChannel != null)
       {
-        await RespondAsync($"Volume doesn't go higher than 111", ephemeral: true);
+        // Get the voice channel by ID
+        var voiceChannel = Context.Guild.GetVoiceChannel(guildUser.VoiceChannel.Id);
+        IReadOnlyCollection<SocketGuildUser> Attendees= voiceChannel.ConnectedUsers;
+        List<string> MembersList = new List<string>();
+        string s_MessageToChannel = "Members included in event: ";
+
+        if (guildUser.VoiceChannel.ConnectedUsers.Count >= 1)
+        {
+          foreach (var user in Attendees)
+          {
+            s_MessageToChannel += $"<@{user.Id}> ";
+          }
+
+          await RespondAsync(s_MessageToChannel);
+        }
       }
       else
       {
-        var player = Program.lavalinkManager.GetPlayer(Context.Guild.Id) ??
-        await Program.lavalinkManager.JoinAsync((Context.User as IGuildUser)?.VoiceChannel);
-        await player.SetVolumeAsync(volume);
-        await FollowupAsync($"Volume set to {volume}.", ephemeral: true);
+        await RespondAsync("You need to be in a voice channel for this command to work", ephemeral: true);
       }
 
+      
     }
-    [SlashCommand("clear-songs", "Clear the songs queue")]
-    public async Task ClearQueue()
-    {
-
-      var player = Program.lavalinkManager.GetPlayer(Context.Guild.Id);
-      await Program.lavalinkManager.StopAsync();
-      await player.DisconnectAsync();
-      await RespondAsync("Your queue has been cleared Queue", ephemeral: true);
-    }
-
 
     [SlashCommand("split-loot", "Perform a loot split.")]
     public async Task SplitLoot(LootSplitType LootSplitType, SocketGuildUser CallerName, EventTypeEnum EventType, int? NonDamagedLootTotal = null, int? DamagedLootTotal = null, int? SilverBagsTotal = null)
@@ -1327,512 +1340,512 @@ namespace CommandModule
       await _logger.Log(new LogMessage(LogSeverity.Info, "Split-Loot deny", $"User: {Context.User.Username} denied a split-loot", null));
     }
 
-    [SlashCommand("add-game-to-portal", "Create Button roles for the portal")]
-    public async Task AddGame(string Game_Name, SocketRole? Role = null)
-    {
-      SocketRole newRole = null;
-      var embed = new EmbedBuilder();
-      var comp = new ComponentBuilder();
+    //[SlashCommand("add-game-to-portal", "Create Button roles for the portal")]
+    //public async Task AddGame(string Game_Name, SocketRole? Role = null)
+    //{
+    //  SocketRole newRole = null;
+    //  var embed = new EmbedBuilder();
+    //  var comp = new ComponentBuilder();
 
-      if (Role == null)
-      {
-        await Context.Guild.CreateRoleAsync(Game_Name, null);
+    //  if (Role == null)
+    //  {
+    //    await Context.Guild.CreateRoleAsync(Game_Name, null);
 
-        var roleIds = Context.Guild.Roles;
+    //    var roleIds = Context.Guild.Roles;
 
-        foreach (var roles in roleIds)
-        {
-          if (roles.Name == Game_Name)
-          {
-            newRole = Context.Guild.GetRole(roles.Id);
-          }
-        }
-
-
-        var membercount = Context.Guild.GetRole((Role == null) ? newRole.Id : Role.Id).Members.Count();
-
-        embed.WithTitle($"{Game_Name}");
-        embed.AddField("Role Name", (Role == null) ? newRole : Role.Name, true);
-        embed.AddField("Current Members playing", membercount, true);
-        embed.AddField("Game ID:", (Role == null) ? newRole.Id : Role.Id, true);
-        var AddRemoveRoleButton = new ButtonBuilder()
-        {
-          Label = "Get/Remove Role",
-          CustomId = $"getrole-{Game_Name}",
-          Style = ButtonStyle.Success
-        };
-        comp.WithButton(AddRemoveRoleButton);
-
-        await RespondAsync(null, null, false, false, null, null, comp.Build(), embed.Build());
-
-      }
-      else if (Role.Id == ApplicantRoleID)
-      {
-        //1156954659525771344 = application role. Code it to config
-
-        embed.WithTitle($"Still interested in joining Free Beer?");
-        //embed.WithDescription("Still interested in joining Free Beer? Press the button below to start the process.");
-        embed.WithColor(Color.Green);
-        embed.WithFooter("MAKE SURE YOUR DISCORD NICKNAME MATCHES YOUR IN-GAME NAME BEFORE APPLYING. CHECK YOUR PROFILE SETTINGS FOR THIS");
+    //    foreach (var roles in roleIds)
+    //    {
+    //      if (roles.Name == Game_Name)
+    //      {
+    //        newRole = Context.Guild.GetRole(roles.Id);
+    //      }
+    //    }
 
 
-        var GetApplicationRole = new ButtonBuilder()
-        {
-          Label = "APPLY HERE",
-          CustomId = $"getapplicantrole",
-          Style = ButtonStyle.Success,
-          Emote = Emoji.Parse(":point_right:")
-        };
-        comp.WithButton(GetApplicationRole);
+    //    var membercount = Context.Guild.GetRole((Role == null) ? newRole.Id : Role.Id).Members.Count();
 
-        //await ReplyAsync(null, false, embed.Build(), null, null, null, comp.Build());
-        await RespondAsync(null, null, false, false, null, null, comp.Build(), embed.Build());
-      }
-      else
-      {
-        await RespondAsync("Something went wrong.", ephemeral: true);
-      }
-    }
+    //    embed.WithTitle($"{Game_Name}");
+    //    embed.AddField("Role Name", (Role == null) ? newRole : Role.Name, true);
+    //    embed.AddField("Current Members playing", membercount, true);
+    //    embed.AddField("Game ID:", (Role == null) ? newRole.Id : Role.Id, true);
+    //    var AddRemoveRoleButton = new ButtonBuilder()
+    //    {
+    //      Label = "Get/Remove Role",
+    //      CustomId = $"getrole-{Game_Name}",
+    //      Style = ButtonStyle.Success
+    //    };
+    //    comp.WithButton(AddRemoveRoleButton);
 
-    [ComponentInteraction("getapplicantrole")]
-    public async Task VerifyApplicant()
-    {
-      //ADD ANTI SPAM MEASURES HERE
-      //MAKE THE EMBED APPLICATIONS A FOLLOWING
+    //    await RespondAsync(null, null, false, false, null, null, comp.Build(), embed.Build());
 
-      var socketUser = (SocketGuildUser)Context.User;
-      IComponentInteraction ButtonInteraction = Context.Interaction as IComponentInteraction;
-      IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
+    //  }
+    //  else if (Role.Id == ApplicantRoleID)
+    //  {
+    //    //1156954659525771344 = application role. Code it to config
 
-      if (HelperMethods.IsUserFreeBeerMember(socketUser))
-      {
-        await RespondAsync("You're already a member of Free Beer or your currently have an application open.", ephemeral: true);
-      }
-      else if (!HelperMethods.IsUserFreeBeerMember(socketUser) || socketUser.Roles.Any(r => r.Id == 1015016450265727057))
-      {
-        await DeferAsync(true);
-        if (socketUser.Nickname != null)
-        {
-          PlayerLookupInfo? playerInfo = new PlayerLookupInfo();
-          PlayerDataLookUps? albionData = new PlayerDataLookUps();//TODO: STATIC MEMBER
+    //    embed.WithTitle($"Still interested in joining Free Beer?");
+    //    //embed.WithDescription("Still interested in joining Free Beer? Press the button below to start the process.");
+    //    embed.WithColor(Color.Green);
+    //    embed.WithFooter("MAKE SURE YOUR DISCORD NICKNAME MATCHES YOUR IN-GAME NAME BEFORE APPLYING. CHECK YOUR PROFILE SETTINGS FOR THIS");
 
-          try
-          {
-            playerInfo = await albionData.GetPlayerInfo(Context, socketUser.DisplayName);
-            var detailedplayerinfo = await albionData.GetDetailedAlbionPlayerInfo(playerInfo.Id);
 
-            if (detailedplayerinfo.Name.ToLower() == socketUser.Nickname.ToLower())
-            {
-              if(detailedplayerinfo.KillFame >= iRecruitmentKillFame)
-              {
-                await socketUser.AddRoleAsync(ApplicantRoleID);
+    //    var GetApplicationRole = new ButtonBuilder()
+    //    {
+    //      Label = "APPLY HERE",
+    //      CustomId = $"getapplicantrole",
+    //      Style = ButtonStyle.Success,
+    //      Emote = Emoji.Parse(":point_right:")
+    //    };
+    //    comp.WithButton(GetApplicationRole);
 
-                var componentInteraction = Context.Interaction as IComponentInteraction;
-                var channel = Context.Guild.GetForumChannel(1157007187630100531);
-                var threadChannel = await channel.CreatePostAsync($"{socketUser.Nickname} Application {DateTime.Now.ToString("M/d/yyyy")}", ThreadArchiveDuration.OneWeek, null, $"<@{socketUser.Id}> Please post any related info for your application from <#880611577236164628>");
-                var user = Context.Guild.GetUser(socketUser.Id);
+    //    //await ReplyAsync(null, false, embed.Build(), null, null, null, comp.Build());
+    //    await RespondAsync(null, null, false, false, null, null, comp.Build(), embed.Build());
+    //  }
+    //  else
+    //  {
+    //    await RespondAsync("Something went wrong.", ephemeral: true);
+    //  }
+    //}
 
-                if (user is not null)
-                {
-                  await threadChannel.AddUserAsync(user).ConfigureAwait(false);
-                  await threadChannel.AddUserAsync(Context.User as IGuildUser).ConfigureAwait(false);
+    //[ComponentInteraction("getapplicantrole")]
+    //public async Task VerifyApplicant()
+    //{
+    //  //ADD ANTI SPAM MEASURES HERE
+    //  //MAKE THE EMBED APPLICATIONS A FOLLOWING
 
-                  var embed = new EmbedBuilder();
+    //  var socketUser = (SocketGuildUser)Context.User;
+    //  IComponentInteraction ButtonInteraction = Context.Interaction as IComponentInteraction;
+    //  IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
 
-                  embed.WithTitle($"{socketUser.Nickname}");
-                  embed.AddField("PVE Total Fame:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Total:n0}", true);
-                  embed.AddField("Fame for Killing Players", $"{detailedplayerinfo.KillFame:n0}", true);
-                  embed.AddField("Fame for Killing Mobs:", $"{detailedplayerinfo.DeathFame:n0}", true);
-                  embed.AddField("Fame for Gathering:", $"{detailedplayerinfo.LifetimeStatistics.Gathering.All.Total:n0}", true);
-                  embed.AddField("Fame for Crafting:", $"{detailedplayerinfo.LifetimeStatistics.Crafting.Total:n0}", true);
-                  embed.AddField("Fishing Fame:", $"{detailedplayerinfo.LifetimeStatistics.FishingFame:n0}", true);
-                  embed.AddField("Infamy: Corrupted Dungeons", $"{detailedplayerinfo.LifetimeStatistics.PvE.CorruptedDungeon:n0}", true);
-                  embed.AddField("Infamy: Hellgates:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Hellgate:n0}", true);
-                  embed.AddField("Mists:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Mists:n0}");
-                  embed.AddField("Outlands:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Outlands:n0}");
-                  embed.AddField("Avalon:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Avalon:n0}");
+    //  if (HelperMethods.IsUserFreeBeerMember(socketUser))
+    //  {
+    //    await RespondAsync("You're already a member of Free Beer or your currently have an application open.", ephemeral: true);
+    //  }
+    //  else if (!HelperMethods.IsUserFreeBeerMember(socketUser) || socketUser.Roles.Any(r => r.Id == 1015016450265727057))
+    //  {
+    //    await DeferAsync(true);
+    //    if (socketUser.Nickname != null)
+    //    {
+    //      PlayerLookupInfo? playerInfo = new PlayerLookupInfo();
+    //      PlayerDataLookUps? albionData = new PlayerDataLookUps();//TODO: STATIC MEMBER
 
-                  var approveButton = new ButtonBuilder()
-                  {
-                    Label = "Accept",
-                    CustomId = "acceptapplicant",
-                    Style = ButtonStyle.Success
-                  };
-                  var denyButton = new ButtonBuilder()
-                  {
-                    Label = "Deny",
-                    CustomId = "denyApplicant",
-                    Style = ButtonStyle.Danger
-                  };
+    //      try
+    //      {
+    //        playerInfo = await albionData.GetPlayerInfo(Context, socketUser.DisplayName);
+    //        var detailedplayerinfo = await albionData.GetDetailedAlbionPlayerInfo(playerInfo.Id);
 
-                  var component = new ComponentBuilder();
-                  component.WithButton(approveButton);
-                  component.WithButton(denyButton);
+    //        if (detailedplayerinfo.Name.ToLower() == socketUser.Nickname.ToLower())
+    //        {
+    //          if(detailedplayerinfo.KillFame >= iRecruitmentKillFame)
+    //          {
+    //            await socketUser.AddRoleAsync(ApplicantRoleID);
 
-                  await threadChannel.SendMessageAsync($"Here's some in-game info I found for {socketUser.Nickname}", embed: embed.Build(), components: component.Build());
-                  await FollowupAsync("Application created", ephemeral: true);
-                }
-                else
-                {
-                  Console.WriteLine("USER NOT FOUND DURING GET USER LOOKUP. Possibly bad ID");
-                }
-              }
-              else
-              {
-                await RecruitersModChannel.SendMessageAsync($"{socketUser.DisplayName} application was auto denied. They don't meet the fame requirments of {iRecruitmentKillFame:n0}. ");
+    //            var componentInteraction = Context.Interaction as IComponentInteraction;
+    //            var channel = Context.Guild.GetForumChannel(1157007187630100531);
+    //            var threadChannel = await channel.CreatePostAsync($"{socketUser.Nickname} Application {DateTime.Now.ToString("M/d/yyyy")}", ThreadArchiveDuration.OneWeek, null, $"<@{socketUser.Id}> Please post any related info for your application from <#880611577236164628>");
+    //            var user = Context.Guild.GetUser(socketUser.Id);
 
-                await socketUser.SendMessageAsync($"Your application to Free Beer has been denied for now until you meet fame requirements of {iRecruitmentKillFame:n0}.");
-              }
-            }
-            else
-            {
-              await RespondAsync("I couldn't find you. Update your server name to match your in-game name. If there's still an issues please reach out to a recruiter in #lobby", ephemeral: true);
-            }
-          }
-          catch (Exception ex)
-          {
-            Console.WriteLine(ex.Message);
-            await RespondAsync("Yeah applying ain't gonna work for ya. Please reach out to a recruiter in #lobby", ephemeral: true);
-          }
-        }
-        else
-        {
-          await RespondAsync("Please change your Free Beer server nickname to match your in-game name. You can adjust that in your discord profile settings", ephemeral: true);
-        }
-      }
-      else
-      {
-        await RespondAsync("Yeah applying ain't gonna work for ya. Please reach out to a recruiter in #lobby", ephemeral: true);
-      }
-    }
+    //            if (user is not null)
+    //            {
+    //              await threadChannel.AddUserAsync(user).ConfigureAwait(false);
+    //              await threadChannel.AddUserAsync(Context.User as IGuildUser).ConfigureAwait(false);
+
+    //              var embed = new EmbedBuilder();
+
+    //              embed.WithTitle($"{socketUser.Nickname}");
+    //              embed.AddField("PVE Total Fame:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Total:n0}", true);
+    //              embed.AddField("Fame for Killing Players", $"{detailedplayerinfo.KillFame:n0}", true);
+    //              embed.AddField("Fame for Killing Mobs:", $"{detailedplayerinfo.DeathFame:n0}", true);
+    //              embed.AddField("Fame for Gathering:", $"{detailedplayerinfo.LifetimeStatistics.Gathering.All.Total:n0}", true);
+    //              embed.AddField("Fame for Crafting:", $"{detailedplayerinfo.LifetimeStatistics.Crafting.Total:n0}", true);
+    //              embed.AddField("Fishing Fame:", $"{detailedplayerinfo.LifetimeStatistics.FishingFame:n0}", true);
+    //              embed.AddField("Infamy: Corrupted Dungeons", $"{detailedplayerinfo.LifetimeStatistics.PvE.CorruptedDungeon:n0}", true);
+    //              embed.AddField("Infamy: Hellgates:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Hellgate:n0}", true);
+    //              embed.AddField("Mists:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Mists:n0}");
+    //              embed.AddField("Outlands:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Outlands:n0}");
+    //              embed.AddField("Avalon:", $"{detailedplayerinfo.LifetimeStatistics.PvE.Avalon:n0}");
+
+    //              var approveButton = new ButtonBuilder()
+    //              {
+    //                Label = "Accept",
+    //                CustomId = "acceptapplicant",
+    //                Style = ButtonStyle.Success
+    //              };
+    //              var denyButton = new ButtonBuilder()
+    //              {
+    //                Label = "Deny",
+    //                CustomId = "denyApplicant",
+    //                Style = ButtonStyle.Danger
+    //              };
+
+    //              var component = new ComponentBuilder();
+    //              component.WithButton(approveButton);
+    //              component.WithButton(denyButton);
+
+    //              await threadChannel.SendMessageAsync($"Here's some in-game info I found for {socketUser.Nickname}", embed: embed.Build(), components: component.Build());
+    //              await FollowupAsync("Application created", ephemeral: true);
+    //            }
+    //            else
+    //            {
+    //              Console.WriteLine("USER NOT FOUND DURING GET USER LOOKUP. Possibly bad ID");
+    //            }
+    //          }
+    //          else
+    //          {
+    //            await RecruitersModChannel.SendMessageAsync($"{socketUser.DisplayName} application was auto denied. They don't meet the fame requirments of {iRecruitmentKillFame:n0}. ");
+
+    //            await socketUser.SendMessageAsync($"Your application to Free Beer has been denied for now until you meet fame requirements of {iRecruitmentKillFame:n0}.");
+    //          }
+    //        }
+    //        else
+    //        {
+    //          await RespondAsync("I couldn't find you. Update your server name to match your in-game name. If there's still an issues please reach out to a recruiter in #lobby", ephemeral: true);
+    //        }
+    //      }
+    //      catch (Exception ex)
+    //      {
+    //        Console.WriteLine(ex.Message);
+    //        await RespondAsync("Yeah applying ain't gonna work for ya. Please reach out to a recruiter in #lobby", ephemeral: true);
+    //      }
+    //    }
+    //    else
+    //    {
+    //      await RespondAsync("Please change your Free Beer server nickname to match your in-game name. You can adjust that in your discord profile settings", ephemeral: true);
+    //    }
+    //  }
+    //  else
+    //  {
+    //    await RespondAsync("Yeah applying ain't gonna work for ya. Please reach out to a recruiter in #lobby", ephemeral: true);
+    //  }
+    //}
 
     
-    [ComponentInteraction("denyApplicant")]
-    public async Task DenyApplicant()
-    {
-      var socketUser = (SocketGuildUser)Context.User;
+    //[ComponentInteraction("denyApplicant")]
+    //public async Task DenyApplicant()
+    //{
+    //  var socketUser = (SocketGuildUser)Context.User;
 
-      if (socketUser.Roles.Any(r => r.Id == OfficerRoleID) || socketUser.Roles.Any(r => r.Id == RecruitersRoleID))
-      {
-        IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
-        await DeferAsync();
+    //  if (socketUser.Roles.Any(r => r.Id == OfficerRoleID) || socketUser.Roles.Any(r => r.Id == RecruitersRoleID))
+    //  {
+    //    IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
+    //    await DeferAsync();
 
-        var componentInteraction = Context.Interaction as IComponentInteraction;
-        var channel = Context.Guild.GetForumChannel(1157007187630100531);
-        RegearModule regearModule = new RegearModule();
+    //    var componentInteraction = Context.Interaction as IComponentInteraction;
+    //    var channel = Context.Guild.GetForumChannel(1157007187630100531);
+    //    RegearModule regearModule = new RegearModule();
 
-        string ApplicantsName = componentInteraction.Message.Embeds.FirstOrDefault().Title.ToString();
-        ulong DeniedApplicantID = regearModule.GetRegearPosterID(ApplicantsName, Context);
-        var SocketApplicantUser = Context.Guild.GetUser(DeniedApplicantID);
-        await SocketApplicantUser.RemoveRoleAsync(ApplicantRoleID);
+    //    string ApplicantsName = componentInteraction.Message.Embeds.FirstOrDefault().Title.ToString();
+    //    ulong DeniedApplicantID = regearModule.GetRegearPosterID(ApplicantsName, Context);
+    //    var SocketApplicantUser = Context.Guild.GetUser(DeniedApplicantID);
+    //    await SocketApplicantUser.RemoveRoleAsync(ApplicantRoleID);
 
-        await SocketApplicantUser.SendMessageAsync($"{ApplicantsName} Your application to Free Beer has been denied for now.");
+    //    await SocketApplicantUser.SendMessageAsync($"{ApplicantsName} Your application to Free Beer has been denied for now.");
 
-        await RecruitersModChannel.SendMessageAsync($"THIS IS A TEST: {ApplicantsName} application been denied by {socketUser.DisplayName}. Link to application: https://discord.com/channels/335894087397933056/{componentInteraction.ChannelId}");
+    //    await RecruitersModChannel.SendMessageAsync($"THIS IS A TEST: {ApplicantsName} application been denied by {socketUser.DisplayName}. Link to application: https://discord.com/channels/335894087397933056/{componentInteraction.ChannelId}");
 
-        await FollowupAsync($"{ApplicantsName} application has been denied on {DateTime.Today.ToString("M/d/yyyy")}");
-      }
-      else
-      {
+    //    await FollowupAsync($"{ApplicantsName} application has been denied on {DateTime.Today.ToString("M/d/yyyy")}");
+    //  }
+    //  else
+    //  {
 
-      }
+    //  }
       
 
-    }
+    //}
 
-    [ComponentInteraction("acceptapplicant")]
-    async Task AcceptApplicant()
-    {
-      var socketUser = (SocketGuildUser)Context.User;
+    //[ComponentInteraction("acceptapplicant")]
+    //async Task AcceptApplicant()
+    //{
+    //  var socketUser = (SocketGuildUser)Context.User;
 
-      if (socketUser.Roles.Any(r => r.Id == OfficerRoleID) || socketUser.Roles.Any(r => r.Id == RecruitersRoleID))
-      {
-        //await DeferAsync();
-        IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
+    //  if (socketUser.Roles.Any(r => r.Id == OfficerRoleID) || socketUser.Roles.Any(r => r.Id == RecruitersRoleID))
+    //  {
+    //    //await DeferAsync();
+    //    IMessageChannel RecruitersModChannel = Context.Client.GetChannel(RecruitersModChannelID) as IMessageChannel;
 
-        var componentInteraction = Context.Interaction as IComponentInteraction;
+    //    var componentInteraction = Context.Interaction as IComponentInteraction;
 
-        string ApplicantsName = componentInteraction.Message.Embeds.FirstOrDefault().Title.ToString();
+    //    string ApplicantsName = componentInteraction.Message.Embeds.FirstOrDefault().Title.ToString();
 
-        RegearModule regearModule = new RegearModule();
+    //    RegearModule regearModule = new RegearModule();
 
-        ulong AcceptedApplicantID = regearModule.GetRegearPosterID(ApplicantsName, Context);
-        var SocketApplicantUser = Context.Guild.GetUser(AcceptedApplicantID);
+    //    ulong AcceptedApplicantID = regearModule.GetRegearPosterID(ApplicantsName, Context);
+    //    var SocketApplicantUser = Context.Guild.GetUser(AcceptedApplicantID);
 
-        await socketUser.RemoveRoleAsync(ApplicantRoleID);
+    //    await socketUser.RemoveRoleAsync(ApplicantRoleID);
 
-        await RecruitersModChannel.SendMessageAsync($"THIS IS A TEST: {ApplicantsName} has been accepted and auto registred by {socketUser.DisplayName}. Link to application: https://discord.com/channels/335894087397933056/{componentInteraction.ChannelId}");
-        await RespondAsync($"{ApplicantsName} application has been accepted on {DateTime.Today.ToString("M/d/yyyy")}"); //Creates unknownwebhook same interaction twice
-        await Register(SocketApplicantUser, ApplicantsName);
-      }
-    }
+    //    await RecruitersModChannel.SendMessageAsync($"THIS IS A TEST: {ApplicantsName} has been accepted and auto registred by {socketUser.DisplayName}. Link to application: https://discord.com/channels/335894087397933056/{componentInteraction.ChannelId}");
+    //    await RespondAsync($"{ApplicantsName} application has been accepted on {DateTime.Today.ToString("M/d/yyyy")}"); //Creates unknownwebhook same interaction twice
+    //    await Register(SocketApplicantUser, ApplicantsName);
+    //  }
+    //}
 
-    [ComponentInteraction("getrole*")]
-    public async Task GetRole()
-    {
-      var interaction = Context.Interaction as IComponentInteraction;
-      IComponentInteraction ButtonInteraction = Context.Interaction as IComponentInteraction;
+    //[ComponentInteraction("getrole*")]
+    //public async Task GetRole()
+    //{
+    //  var interaction = Context.Interaction as IComponentInteraction;
+    //  IComponentInteraction ButtonInteraction = Context.Interaction as IComponentInteraction;
 
-      string sGameName = ButtonInteraction.Message.Embeds.FirstOrDefault().Title.ToString();
-      ulong roleID = Convert.ToUInt64(ButtonInteraction.Message.Embeds.FirstOrDefault().Fields[2].Value.ToString());
-
-
+    //  string sGameName = ButtonInteraction.Message.Embeds.FirstOrDefault().Title.ToString();
+    //  ulong roleID = Convert.ToUInt64(ButtonInteraction.Message.Embeds.FirstOrDefault().Fields[2].Value.ToString());
 
 
-      var user = Context.Guild.GetUser(Context.User.Id);
 
 
-      if (!user.Roles.Any(r => r.Name == sGameName))
-      {
-        await user.AddRoleAsync(roleID);
-        await Context.User.SendMessageAsync($"You have been granted the {sGameName} role");
-        await DeferAsync();
-      }
-      else
-      {
-        await user.RemoveRoleAsync(roleID);
-        await Context.User.SendMessageAsync($"{sGameName} role has been removed");
-        await DeferAsync();
-      }
+    //  var user = Context.Guild.GetUser(Context.User.Id);
 
 
-      var membercount = Context.Guild.GetRole(roleID).Members.Count();
-
-      EmbedBuilder previousEmbed = new EmbedBuilder();
-      var previousButtons = ComponentBuilder.FromComponents(ButtonInteraction.Message.Components);
-
-      previousEmbed.Title = ButtonInteraction.Message.Embeds.FirstOrDefault().Title.ToString();
-      previousEmbed.AddField("Role Name", ButtonInteraction.Message.Embeds.FirstOrDefault().Fields[0].Value.ToString(), true);
-      previousEmbed.AddField("Current Members", membercount, true);
-      previousEmbed.AddField("Game ID:", ButtonInteraction.Message.Embeds.FirstOrDefault().Fields[2].Value.ToString(), true);
-
-      var fieldtest = interaction.Message.Embeds.FirstOrDefault().Fields[1].Value;
-
-      await Context.Interaction.ModifyOriginalResponseAsync((x) =>
-      {
-        x.Embed = previousEmbed.Build();
-        x.Components = previousButtons.Build();
-      });
-
-    }
-
-    [SlashCommand("register-guild-to-alliance", "Register a guild to the alliance")]
-    public async Task RegisterGuild(string Guild_Name)
-    {
-      //await DeferAsync();
-      GuildDataHandler.GuildInfo guildData = await new GuildDataHandler().GetGuildSearchInfo(Context, Guild_Name);
-      if (AllianceGuildGuidID == guildData.AllianceId)
-      {
-        dataBaseService = new DataBaseService();
-        await dataBaseService.RegisterGuild(new RegisteredAllianceGuilds
-        {
-          GuildID = guildData.Id,
-          GuildName = guildData.Name,
-          DateRegistered = DateTime.Today,
-          KillFame = (int)guildData.killFame
-        });
-        await RespondAsync($"Guild {guildData.Name} has been registered to the Free Beer alliance", ephemeral: false);
-
-      }
-      else
-      {
-        await RespondAsync("Registration failed. Can't find guild or guild is not currently in Free Beer alliance", ephemeral: true);
-      }
-    }
+    //  if (!user.Roles.Any(r => r.Name == sGameName))
+    //  {
+    //    await user.AddRoleAsync(roleID);
+    //    await Context.User.SendMessageAsync($"You have been granted the {sGameName} role");
+    //    await DeferAsync();
+    //  }
+    //  else
+    //  {
+    //    await user.RemoveRoleAsync(roleID);
+    //    await Context.User.SendMessageAsync($"{sGameName} role has been removed");
+    //    await DeferAsync();
+    //  }
 
 
-    [SlashCommand("register-to-allaince", "Register yourself to the alliance")]
-    public async Task RegisterToAllaince()
-    {
-      string? sUserNickname = ((Context.Interaction.User as SocketGuildUser).DisplayName != null) ? (Context.Interaction.User as SocketGuildUser).DisplayName : Context.Interaction.User.Username;
-      var socketUser = (SocketGuildUser)Context.User;
+    //  var membercount = Context.Guild.GetRole(roleID).Members.Count();
 
-      PlayerLookupInfo playerInfo = new PlayerLookupInfo();
-      PlayerDataLookUps albionData = new PlayerDataLookUps();
+    //  EmbedBuilder previousEmbed = new EmbedBuilder();
+    //  var previousButtons = ComponentBuilder.FromComponents(ButtonInteraction.Message.Components);
 
-      var tempRoleIDReign = Context.Guild.GetRole(1128714322860843068);
-      var tempRolIDFreeBeer = Context.Guild.GetRole(1128714260386689075);
-      var tempRoleIDAeternums = Context.Guild.GetRole(1140453707058778182);
-      var tempRoleIDAlpacasOnYourBack = Context.Guild.GetRole(1129090950971535500);
+    //  previousEmbed.Title = ButtonInteraction.Message.Embeds.FirstOrDefault().Title.ToString();
+    //  previousEmbed.AddField("Role Name", ButtonInteraction.Message.Embeds.FirstOrDefault().Fields[0].Value.ToString(), true);
+    //  previousEmbed.AddField("Current Members", membercount, true);
+    //  previousEmbed.AddField("Game ID:", ButtonInteraction.Message.Embeds.FirstOrDefault().Fields[2].Value.ToString(), true);
 
-      var tempGuildIDReign = "gbwnj2Z2TFiImf3gAPTgRg";
-      var tempGuildIDFreeBeer = "9ndyGFTPT0mYwPOPDXDmSQ";
-      var tempGuildIDAeternums = "gbwnj2Z2TFiImf3gAPTgRg";
-      string tempGuildIDAlpacasOnYourBack = "asUiraoQS02Rf7ipBjKo_g";
+    //  var fieldtest = interaction.Message.Embeds.FirstOrDefault().Fields[1].Value;
 
-      var AllianceID = "VnJPzLDbROy3rdfbc28L_w";
-      string GuildTag = "NA";
-      dataBaseService = new DataBaseService();
+    //  await Context.Interaction.ModifyOriginalResponseAsync((x) =>
+    //  {
+    //    x.Embed = previousEmbed.Build();
+    //    x.Components = previousButtons.Build();
+    //  });
 
-      await _logger.Log(new LogMessage(LogSeverity.Info, "Alliance Register", $"User: {Context.User.Username}, Command: register-alliance", null));
+    //}
 
-      try
-      {
-        playerInfo = await albionData.GetPlayerInfo(Context, sUserNickname);
+    //[SlashCommand("register-guild-to-alliance", "Register a guild to the alliance")]
+    //public async Task RegisterGuild(string Guild_Name)
+    //{
+    //  //await DeferAsync();
+    //  GuildDataHandler.GuildInfo guildData = await new GuildDataHandler().GetGuildSearchInfo(Context, Guild_Name);
+    //  if (AllianceGuildGuidID == guildData.AllianceId)
+    //  {
+    //    //dataBaseService = new DataBaseService();
+    //    //await dataBaseService.RegisterGuild(new RegisteredAllianceGuilds
+    //    //{
+    //    //  GuildID = guildData.Id,
+    //    //  GuildName = guildData.Name,
+    //    //  DateRegistered = DateTime.Today,
+    //    //  KillFame = (int)guildData.killFame
+    //    //});
+    //    await RespondAsync($"Guild {guildData.Name} has been registered to the Free Beer alliance", ephemeral: false);
 
-        await DeferAsync();
-        if (await dataBaseService.CheckForRegisteredGuild(playerInfo.GuildId) && IsPlayerInAlliance(playerInfo.AllianceId))
-        {
-          if (playerInfo.Name == sUserNickname)
-          {
-            if (!await dataBaseService.CheckAlliancePlayerIsExist(playerInfo.Id))
-            {
-              if (playerInfo.GuildId == tempGuildIDFreeBeer)
-              {
-                await socketUser.AddRoleAsync(tempRolIDFreeBeer);
-                GuildTag = $"[Free] {playerInfo.Name}";
-              }
-              else if (playerInfo.GuildId == tempGuildIDReign)
-              {
-                await socketUser.AddRoleAsync(tempRoleIDReign);
-                GuildTag = $"[REIGN] {playerInfo.Name}";
-              }
-              else if (playerInfo.GuildId == tempGuildIDAeternums)
-              {
-                await socketUser.AddRoleAsync(tempRoleIDAeternums);
-                GuildTag = $"[Aeter] {playerInfo.Name}";
-              }
-              else if (playerInfo.GuildId == tempGuildIDAlpacasOnYourBack)
-              {
-                await socketUser.AddRoleAsync(tempRoleIDAlpacasOnYourBack);
-                GuildTag = $"[Alpacas] {playerInfo.Name}";
-
-              }
-
-              try
-              {
-                await socketUser.ModifyAsync(x => x.Nickname = GuildTag);
-              }
-              catch (Exception ex)
-              {
-                Console.WriteLine($"Modifying guild tag into server nickname failed. User: {playerInfo.Name}");
-              }
+    //  }
+    //  else
+    //  {
+    //    await RespondAsync("Registration failed. Can't find guild or guild is not currently in Free Beer alliance", ephemeral: true);
+    //  }
+    //}
 
 
-              await dataBaseService.RegisterAlliancePlayerInfo(new RegisteredAllianceMembers
-              {
-                PlayerID = playerInfo.Id,
-                PlayerName = playerInfo.Name,
-                GuildID = playerInfo.GuildId,
-                GuildName = playerInfo.GuildName,
-                AllianceID = playerInfo.AllianceId,
-                AllianceName = playerInfo.AllianceName,
-                DateRegistered = DateTime.Today,
-                KillFame = playerInfo.KillFame
-              });
+  //  [SlashCommand("register-to-allaince", "Register yourself to the alliance")]
+  //  public async Task RegisterToAllaince()
+  //  {
+  //    string? sUserNickname = ((Context.Interaction.User as SocketGuildUser).DisplayName != null) ? (Context.Interaction.User as SocketGuildUser).DisplayName : Context.Interaction.User.Username;
+  //    var socketUser = (SocketGuildUser)Context.User;
 
-              await FollowupAsync($"<@{socketUser.Id}> in guild {playerInfo.GuildName} has been registed to the Alliance.");
-            }
-            else
-            {
-              await FollowupAsync("Registration failed. You're already registered to the Alliance");
-            }
-          }
-          else
-          {
-            await FollowupAsync("Registration failed. Your discord name must match EXACTLY to your in-game name");
-          }
-        }
-        else
-        {
-          await FollowupAsync("Registration failed. Your guild is not registered to the Alliance.");
-        }
-      }
-      catch (Exception ex)
-      {
-        await RespondAsync("Registration failed. Can't find you or your discord name doesn't match your in-game name.", ephemeral: true);
-      }
+  //    PlayerLookupInfo playerInfo = new PlayerLookupInfo();
+  //    PlayerDataLookUps albionData = new PlayerDataLookUps();
 
+  //    var tempRoleIDReign = Context.Guild.GetRole(1128714322860843068);
+  //    var tempRolIDFreeBeer = Context.Guild.GetRole(1128714260386689075);
+  //    var tempRoleIDAeternums = Context.Guild.GetRole(1140453707058778182);
+  //    var tempRoleIDAlpacasOnYourBack = Context.Guild.GetRole(1129090950971535500);
 
-    }
-    [SlashCommand("remove-guild-from-alliance", "Removes a guild from the alliance")]
-    public async Task UnRegisterGuild(string Guild_Name)
-    {
+  //    var tempGuildIDReign = "gbwnj2Z2TFiImf3gAPTgRg";
+  //    var tempGuildIDFreeBeer = "9ndyGFTPT0mYwPOPDXDmSQ";
+  //    var tempGuildIDAeternums = "gbwnj2Z2TFiImf3gAPTgRg";
+  //    string tempGuildIDAlpacasOnYourBack = "asUiraoQS02Rf7ipBjKo_g";
 
+  //    var AllianceID = "VnJPzLDbROy3rdfbc28L_w";
+  //    string GuildTag = "NA";
+  //    //dataBaseService = new DataBaseService();
 
-    }
+  //    await _logger.Log(new LogMessage(LogSeverity.Info, "Alliance Register", $"User: {Context.User.Username}, Command: register-alliance", null));
 
-    [SlashCommand("unregister-user-from-allaince", "Removes a user from the alliance")]
-    public async Task UnRegisterAllianceMember(string Player_Name, SocketGuildUser? DiscordUser = null)
-    {
+  //    try
+  //    {
+  //      playerInfo = await albionData.GetPlayerInfo(Context, sUserNickname);
 
-      PlayerDataLookUps albionData = new PlayerDataLookUps();
-      PlayerLookupInfo playerInfo = new PlayerLookupInfo();
+  //      await DeferAsync();
+  //      if (await dataBaseService.CheckForRegisteredGuild(playerInfo.GuildId) && IsPlayerInAlliance(playerInfo.AllianceId))
+  //      {
+  //        if (playerInfo.Name == sUserNickname)
+  //        {
+  //          if (!await dataBaseService.CheckAlliancePlayerIsExist(playerInfo.Id))
+  //          {
+  //            if (playerInfo.GuildId == tempGuildIDFreeBeer)
+  //            {
+  //              await socketUser.AddRoleAsync(tempRolIDFreeBeer);
+  //              GuildTag = $"[Free] {playerInfo.Name}";
+  //            }
+  //            else if (playerInfo.GuildId == tempGuildIDReign)
+  //            {
+  //              await socketUser.AddRoleAsync(tempRoleIDReign);
+  //              GuildTag = $"[REIGN] {playerInfo.Name}";
+  //            }
+  //            else if (playerInfo.GuildId == tempGuildIDAeternums)
+  //            {
+  //              await socketUser.AddRoleAsync(tempRoleIDAeternums);
+  //              GuildTag = $"[Aeter] {playerInfo.Name}";
+  //            }
+  //            else if (playerInfo.GuildId == tempGuildIDAlpacasOnYourBack)
+  //            {
+  //              await socketUser.AddRoleAsync(tempRoleIDAlpacasOnYourBack);
+  //              GuildTag = $"[Alpacas] {playerInfo.Name}";
 
-      try
-      {
-        playerInfo = await albionData.GetPlayerInfo(Context, Player_Name);
+  //            }
 
-        if (DiscordUser != null)
-        {
-          foreach (var roles in DiscordUser.Roles)
-          {
-            if (roles.Name != "@everyone")
-            {
-              await DiscordUser.RemoveRoleAsync(roles.Id);
-            }
-          }
-        }
-
-        dataBaseService = new DataBaseService();
-        dataBaseService.DeleteRegisteredAlliancePlayer(playerInfo.Id);
-        await RespondAsync($"Member {playerInfo.Name} has been de-registered from the allaince", ephemeral: true);
-      }
-      catch
-      {
-        await RespondAsync("De-register failed. Incorrect name or they don't exist in database", ephemeral: true);
-      }
-
-    }
+  //            try
+  //            {
+  //              await socketUser.ModifyAsync(x => x.Nickname = GuildTag);
+  //            }
+  //            catch (Exception ex)
+  //            {
+  //              Console.WriteLine($"Modifying guild tag into server nickname failed. User: {playerInfo.Name}");
+  //            }
 
 
-    [SlashCommand("view-alliance-stats", "Check out alliance stats")]
-    public async Task GetAllianceStats()
-    {
-      PlayerDataLookUps albionData = new PlayerDataLookUps();
+  //            await dataBaseService.RegisterAlliancePlayerInfo(new RegisteredAllianceMembers
+  //            {
+  //              PlayerID = playerInfo.Id,
+  //              PlayerName = playerInfo.Name,
+  //              GuildID = playerInfo.GuildId,
+  //              GuildName = playerInfo.GuildName,
+  //              AllianceID = playerInfo.AllianceId,
+  //              AllianceName = playerInfo.AllianceName,
+  //              DateRegistered = DateTime.Today,
+  //              KillFame = playerInfo.KillFame
+  //            });
 
-      List<int> BattleIDs = new List<int>();
-      //BattleIDs.Add(966563738); //adding BattleBoard ID's to list
-      BattleIDs.Add(966557264);
+  //            await FollowupAsync($"<@{socketUser.Id}> in guild {playerInfo.GuildName} has been registed to the Alliance.");
+  //          }
+  //          else
+  //          {
+  //            await FollowupAsync("Registration failed. You're already registered to the Alliance");
+  //          }
+  //        }
+  //        else
+  //        {
+  //          await FollowupAsync("Registration failed. Your discord name must match EXACTLY to your in-game name");
+  //        }
+  //      }
+  //      else
+  //      {
+  //        await FollowupAsync("Registration failed. Your guild is not registered to the Alliance.");
+  //      }
+  //    }
+  //    catch (Exception ex)
+  //    {
+  //      await RespondAsync("Registration failed. Can't find you or your discord name doesn't match your in-game name.", ephemeral: true);
+  //    }
 
-      List<PlayerDataHandler.Rootobject> eventData = new List<PlayerDataHandler.Rootobject>();
 
-      foreach (int Battle in BattleIDs)
-      {
-        eventData.Add(await albionData.GetAlbionEventInfo(Battle));
-      }
+  //  }
+  //  [SlashCommand("remove-guild-from-alliance", "Removes a guild from the alliance")]
+  //  public async Task UnRegisterGuild(string Guild_Name)
+  //  {
 
-      //Filter All Kills and deaths in events
-      foreach (var Event in eventData) 
-      {
-        Console.WriteLine(Event.EventId);
-      }
 
-    }
+  //  }
 
-    private bool IsPlayerGuildInAlliance(string guildID)
-    {
-      string tempGuildIDReign = "gbwnj2Z2TFiImf3gAPTgRg";
-      string tempGuildIDFreeBeer = "9ndyGFTPT0mYwPOPDXDmSQ";
-      //string tempGuildIDWarriorsCompany = "yD2A0-UjQgG6swbTkOrqiQ";
-      string tempGuildIDAlpacasOnYourBack = "asUiraoQS02Rf7ipBjKo_g";
+  //  [SlashCommand("unregister-user-from-allaince", "Removes a user from the alliance")]
+  //  public async Task UnRegisterAllianceMember(string Player_Name, SocketGuildUser? DiscordUser = null)
+  //  {
 
-      if (guildID == tempGuildIDReign || guildID == tempGuildIDFreeBeer || guildID == tempGuildIDAlpacasOnYourBack)
-      {
-        return true;
-      }
-      return false;
-    }
+  //    PlayerDataLookUps albionData = new PlayerDataLookUps();
+  //    PlayerLookupInfo playerInfo = new PlayerLookupInfo();
 
-    private bool IsPlayerInAlliance(string a_sAllianceID)
-    {
-      var AllianceID = "VnJPzLDbROy3rdfbc28L_w";
+  //    try
+  //    {
+  //      playerInfo = await albionData.GetPlayerInfo(Context, Player_Name);
 
-      if (a_sAllianceID == AllianceID)
-      {
-        return true;
-      }
-      return false;
-    }
+  //      if (DiscordUser != null)
+  //      {
+  //        foreach (var roles in DiscordUser.Roles)
+  //        {
+  //          if (roles.Name != "@everyone")
+  //          {
+  //            await DiscordUser.RemoveRoleAsync(roles.Id);
+  //          }
+  //        }
+  //      }
+
+  //      //dataBaseService = new DataBaseService();
+  //      //dataBaseService.DeleteRegisteredAlliancePlayer(playerInfo.Id);
+  //      await RespondAsync($"Member {playerInfo.Name} has been de-registered from the allaince", ephemeral: true);
+  //    }
+  //    catch
+  //    {
+  //      await RespondAsync("De-register failed. Incorrect name or they don't exist in database", ephemeral: true);
+  //    }
+
+  //  }
+
+
+  //  [SlashCommand("view-alliance-stats", "Check out alliance stats")]
+  //  public async Task GetAllianceStats()
+  //  {
+  //    PlayerDataLookUps albionData = new PlayerDataLookUps();
+
+  //    List<int> BattleIDs = new List<int>();
+  //    //BattleIDs.Add(966563738); //adding BattleBoard ID's to list
+  //    BattleIDs.Add(966557264);
+
+  //    List<PlayerDataHandler.Rootobject> eventData = new List<PlayerDataHandler.Rootobject>();
+
+  //    foreach (int Battle in BattleIDs)
+  //    {
+  //      eventData.Add(await albionData.GetAlbionEventInfo(Battle));
+  //    }
+
+  //    //Filter All Kills and deaths in events
+  //    foreach (var Event in eventData) 
+  //    {
+  //      Console.WriteLine(Event.EventId);
+  //    }
+
+  //  }
+
+  //  private bool IsPlayerGuildInAlliance(string guildID)
+  //  {
+  //    string tempGuildIDReign = "gbwnj2Z2TFiImf3gAPTgRg";
+  //    string tempGuildIDFreeBeer = "9ndyGFTPT0mYwPOPDXDmSQ";
+  //    //string tempGuildIDWarriorsCompany = "yD2A0-UjQgG6swbTkOrqiQ";
+  //    string tempGuildIDAlpacasOnYourBack = "asUiraoQS02Rf7ipBjKo_g";
+
+  //    if (guildID == tempGuildIDReign || guildID == tempGuildIDFreeBeer || guildID == tempGuildIDAlpacasOnYourBack)
+  //    {
+  //      return true;
+  //    }
+  //    return false;
+  //  }
+
+  //  private bool IsPlayerInAlliance(string a_sAllianceID)
+  //  {
+  //    var AllianceID = "VnJPzLDbROy3rdfbc28L_w";
+
+  //    if (a_sAllianceID == AllianceID)
+  //    {
+  //      return true;
+  //    }
+  //    return false;
+  //  }
   }
 }

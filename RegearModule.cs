@@ -87,21 +87,21 @@ namespace DiscordBot.RegearModule
 
       try
       {
-        dataBaseService = new DataBaseService();
-        var player = dataBaseService.GetPlayerInfoByName(a_EventData.Victim.Name);
-        var moneyType = dataBaseService.GetMoneyTypeByName(moneyTypes);
-        await dataBaseService.AddPlayerReGear(new PlayerLoot
-        {
-          TypeId = moneyType.Id,
-          CreateDate = DateTime.Now,
-          Loot = Convert.ToDecimal(marketDataAndGearImg[1]),
-          PlayerId = player.Id,
-          Message = " Regear(s) have been processed.  Has been added to your account. Please emote :beers: to confirm",
-          PartyLeader = partyLeader,
-          KillId = a_EventData.EventId.ToString(),
-          Reason = a_eEventType.ToString(),
-          QueueId = "0"
-        });
+        //dataBaseService = new DataBaseService();
+        //var player = dataBaseService.GetPlayerInfoByName(a_EventData.Victim.Name);
+        //var moneyType = dataBaseService.GetMoneyTypeByName(moneyTypes);
+        //await dataBaseService.AddPlayerReGear(new PlayerLoot
+        //{
+        //  TypeId = moneyType.Id,
+        //  CreateDate = DateTime.Now,
+        //  Loot = Convert.ToDecimal(marketDataAndGearImg[1]),
+        //  PlayerId = player.Id,
+        //  Message = " Regear(s) have been processed.  Has been added to your account. Please emote :beers: to confirm",
+        //  PartyLeader = partyLeader,
+        //  KillId = a_EventData.EventId.ToString(),
+        //  Reason = a_eEventType.ToString(),
+        //  QueueId = "0"
+        //});
 
         var commandUser = command.Guild.GetUser(command.User.Id);
 

@@ -970,63 +970,72 @@ namespace PlayerData
       {
         sUserNickname = CleanUpShotCallerName(sUserNickname);
       }
-
-      using (HttpResponseMessage response = await AlbionOnlineDataParser.AlbionOnlineDataParser.ApiClient.GetAsync($"search?q={sUserNickname}"))
+      try
       {
-        if (response.IsSuccessStatusCode)
+        using (HttpResponseMessage response = await AlbionOnlineDataParser.AlbionOnlineDataParser.ApiClient.GetAsync($"search?q={sUserNickname}"))
         {
-          sPlayerData = await response.Content.ReadAsStringAsync();
-          var parsedObjects = JObject.Parse(sPlayerData);
-          PlayersSearch playerSearchData = JsonConvert.DeserializeObject<PlayersSearch>(sPlayerData);
-
-          //USE THIS LOGIC TO CREATE METHOD TO ADD USER TO DATABASE
-          if (playerSearchData.players.FirstOrDefault() != null)
+          if (response.IsSuccessStatusCode)
           {
-            if (playerSearchData.players.Count > 1)
+            sPlayerData = await response.Content.ReadAsStringAsync();
+            var parsedObjects = JObject.Parse(sPlayerData);
+            PlayersSearch playerSearchData = JsonConvert.DeserializeObject<PlayersSearch>(sPlayerData);
+
+            //USE THIS LOGIC TO CREATE METHOD TO ADD USER TO DATABASE
+            if (playerSearchData.players.FirstOrDefault() != null)
             {
-              returnValue = playerSearchData.players.Where(x => x.FameRatio > 0).FirstOrDefault();
+              if (playerSearchData.players.Count > 1)
+              {
+                returnValue = playerSearchData.players.Where(x => x.FameRatio > 0).FirstOrDefault();
+              }
+              else
+              {
+                returnValue = playerSearchData.players.FirstOrDefault();
+              }
+
+              //Console.WriteLine("Guild Nickname Matches Albion Username");
+              if (returnValue != null)
+              {
+                new PlayerLookupInfo()
+                {
+                  Id = returnValue.Id,
+                  Name = returnValue.Name,
+                  GuildId = returnValue.GuildId,
+                  GuildName = returnValue.GuildName,
+                  AllianceId = returnValue.AllianceId,
+                  AllianceName = returnValue.AllianceName,
+                  Avatar = returnValue.Avatar,
+                  AvatarRing = returnValue.AvatarRing,
+                  KillFame = returnValue.KillFame,
+                  DeathFame = returnValue.DeathFame,
+                  FameRatio = returnValue.FameRatio,
+                  totalKills = returnValue.totalKills,
+                  gvgKills = returnValue.gvgKills,
+                  gvgWon = returnValue.gvgWon,
+                };
+              }
+
             }
             else
             {
-              returnValue = playerSearchData.players.FirstOrDefault();
-            }
+              //await a_socketInteraction.Interaction.FollowupAsync($"Player not found in Albion API. Discord name may not match in-game name or possible misspell.", ephemeral: true);
 
-            //Console.WriteLine("Guild Nickname Matches Albion Username");
-            if(returnValue != null)
-            {
-              new PlayerLookupInfo()
-              {
-                Id = returnValue.Id,
-                Name = returnValue.Name,
-                GuildId = returnValue.GuildId,
-                GuildName = returnValue.GuildName,
-                AllianceId = returnValue.AllianceId,
-                AllianceName = returnValue.AllianceName,
-                Avatar = returnValue.Avatar,
-                AvatarRing = returnValue.AvatarRing,
-                KillFame = returnValue.KillFame,
-                DeathFame = returnValue.DeathFame,
-                FameRatio = returnValue.FameRatio,
-                totalKills = returnValue.totalKills,
-                gvgKills = returnValue.gvgKills,
-                gvgWon = returnValue.gvgWon,
-              };
+              Console.WriteLine($"Player not found. Discord name doesnt match in-game name. Discord user: {a_socketInteraction.User.Username}");
+              await a_socketInteraction.Channel.SendMessageAsync($"Player not found. Discord name doesnt match in-game name. Discord user: {a_socketInteraction.User.Username}");
+              returnValue = null;
             }
-            
           }
           else
           {
-            //await a_socketInteraction.Interaction.FollowupAsync($"Player not found in Albion API. Discord name may not match in-game name or possible misspell.", ephemeral: true);
-
-            Console.WriteLine($"Player not found. Discord name doesnt match in-game name. Discord user: {a_socketInteraction.User.Username}");
-            returnValue = null;
+            await a_socketInteraction.Channel.SendMessageAsync($"Player not found. Discord name doesnt match in-game name. Discord user: {a_socketInteraction.User.Username}");
+            //throw new Exception(response.ReasonPhrase);
           }
         }
-        else
-        {
-          throw new Exception(response.ReasonPhrase);
-        }
       }
+      catch (Exception ex)
+      {
+
+      }
+
       return returnValue;
     }
 

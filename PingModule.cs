@@ -24,6 +24,7 @@ using System.Text.Json.Nodes;
 using System.ComponentModel;
 using Discord.Rest;
 using DiscordBot;
+using DiscordBot.Services;
 
 namespace DNet_V3_Tutorial
 {
@@ -204,61 +205,61 @@ namespace DNet_V3_Tutorial
       string? sUserNickname = ((Context.User as SocketGuildUser).DisplayName != null) ? new PlayerDataLookUps().CleanUpShotCallerName((Context.User as SocketGuildUser).DisplayName) : Context.User.Username;
 
       List<string> insultList = new List<string>
-            {
-                $"Yeahhhhhhh bud. Voltel is better than you....",
-                $"<@{Context.User.Id}>....I guess you prove that even god makes mistakes sometimes.",
-                $"<@{Context.User.Id}> Last night I heard you went to a gathering CTA and MrAlbionOnline ganked you.",
-                $"<@{Context.User.Id}>....Your family tree must be a cactus because everybody on it is a prick.",
-                $"I hear ARCH is recruiting <@{Context.User.Id}>. You meet their PVE expecations.",
-                $"https://www.youtube.com/watch?v=xfr64zoBTAQ&t=3s",
-                $"I'd slap you but that'd be animal abuse",
-                $"Don't worry bud. We saw you die in that 8.3 set to ARCH. That's why were now raising the requirements on IQ",
-                $":middle_finger:",
-                $"Jesus might love you <@{Context.User.Id}>, but everyone else definitely thinks you’re an idiot.",
-                $"If you’re going to act like a turd, go lay on the yard.",
-                $"Calling you an idiot would be an insult to all stupid people.",
-                $"TwoLiner",
-                $"SuperBad",
-                $"Bum",
-                $"<@{Context.User.Id}> I checked your stats. I think your in the wrong guild? Here let me point you to a spot I know a few that fit your caliber. https://discord.gg/archgayy",
-                $"I'm not saying you're fat <@{Context.User.Id}>, but it looks like you were poured into your clothes and forgot to say when",
-                $"You couldn't pour the water out of a boot if the instructions were written on the heel.",
-                $"Everyone who's ever loved you was wrong.",
-                $"Your mother should've swallowed you.",
-                $"I would love to insult you but I'm afraid I won't do as well as nature did.",
-                $"I envy the people that don't know you.",
-                $"I find the fact that you've lived this long both surprising and disappointing.",
-                $"Logged",
-                $"HEY <@&930220030820515850>! You have some explaining to do. I wasn't the one that invited this shitter in here.",
-                $"You have beautiful hair.",
-                $"If free beer had a dick size requirement, you would be removed for inactivity",
-                $"Jisungi died less then you",
-                $"<@{Context.User.Id}> Regear denied, Reason: Skill Issue",
-                $"You know all the shotcallers have you muted right?",
-                $"Congratulations!!! You have found the mystery insult.",
-                $"You should of bought a pair of Nutmollers boots.",
-                $"Whoever told you to be yourself gave you bad advice",
-                $"Paychex",
-                $"Thanks for your opinion, no one cares",
-                $"Gif",
-                //$"SlotMachine",
-                $"You do realize we're just tolerating you, right?",
-                $"It's all about balance… you start talking, I stop listening.",
-                $"You're the reason this country has to put directions on shampoo bottles.",
-                $"Don't worry… the first 40 years of childhood are always the hardest.",
-                $"I was thinking about you today. It reminded me to take out the trash.",
-                $"You are the human equivalent of a participation award",
-                "You're about as useful as Anne Frank's drum kit",
-                "You know what... Your awesome. Have a good day.",
-                "I bet your eco is stealing the guild hammers",
-                "Vearyx tells me your only here because you look pretty.",
-                "OPENMIC",
-                "I don't know what's more trashy. You or JesusEkber's ganks",
-                "Let me guess... You like to play Death givers",
-                "I have no balls but yet mine are still bigger than yours",
-                "Yo, I need a bit of a break from free beer. I've been super frustrated for 80% of the fights these past couple months, and its making me not enjoy the game." +
-                " I understand we have lots of new players, and the guild wants to train them, but thats just not the environment I wanna be in rn. I need to get the tryhard out of me. " +
-                " I intend on coming back later (if you let me back in). Thanks for the past 10 months I spent here",
+      {
+        $"Yeahhhhhhh bud. Voltel is better than you....",
+        $"<@{Context.User.Id}>....I guess you prove that even god makes mistakes sometimes.",
+        $"<@{Context.User.Id}> Last night I heard you went to a gathering CTA and MrAlbionOnline ganked you.",
+        $"<@{Context.User.Id}>....Your family tree must be a cactus because everybody on it is a prick.",
+        $"I hear ARCH is recruiting <@{Context.User.Id}>. You meet their PVE expecations.",
+        $"https://www.youtube.com/watch?v=xfr64zoBTAQ&t=3s",
+        $"I'd slap you but that'd be animal abuse",
+        $"Don't worry bud. We saw you die in that 8.3 set to ARCH. That's why were now raising the requirements on IQ",
+        $":middle_finger:",
+        $"Jesus might love you <@{Context.User.Id}>, but everyone else definitely thinks you’re an idiot.",
+        $"If you’re going to act like a turd, go lay on the yard.",
+        $"Calling you an idiot would be an insult to all stupid people.",
+        $"TwoLiner",
+        $"SuperBad",
+        $"Bum",
+        $"<@{Context.User.Id}> I checked your stats. I think your in the wrong guild? Here let me point you to a spot I know a few that fit your caliber. https://discord.gg/archgayy",
+        $"I'm not saying you're fat <@{Context.User.Id}>, but it looks like you were poured into your clothes and forgot to say when",
+        $"You couldn't pour the water out of a boot if the instructions were written on the heel.",
+        $"Everyone who's ever loved you was wrong.",
+        $"Your mother should've swallowed you.",
+        $"I would love to insult you but I'm afraid I won't do as well as nature did.",
+        $"I envy the people that don't know you.",
+        $"I find the fact that you've lived this long both surprising and disappointing.",
+        $"Logged",
+        $"HEY <@&930220030820515850>! You have some explaining to do. I wasn't the one that invited this shitter in here.",
+        $"You have beautiful hair.",
+        $"If free beer had a dick size requirement, you would be removed for inactivity",
+        $"Jisungi died less then you",
+        $"<@{Context.User.Id}> Regear denied, Reason: Skill Issue",
+        $"You know all the shotcallers have you muted right?",
+        $"Congratulations!!! You have found the mystery insult.",
+        $"You should of bought a pair of Nutmollers boots.",
+        $"Whoever told you to be yourself gave you bad advice",
+        $"Paychex",
+        $"Thanks for your opinion, no one cares",
+        $"Gif",
+        //$"SlotMachine",
+        $"You do realize we're just tolerating you, right?",
+        $"It's all about balance… you start talking, I stop listening.",
+        $"You're the reason this country has to put directions on shampoo bottles.",
+        $"Don't worry… the first 40 years of childhood are always the hardest.",
+        $"I was thinking about you today. It reminded me to take out the trash.",
+        $"You are the human equivalent of a participation award",
+        "You're about as useful as Anne Frank's drum kit",
+        "You know what... Your awesome. Have a good day.",
+        "I bet your eco is stealing the guild hammers",
+        "Vearyx tells me your only here because you look pretty.",
+        "OPENMIC",
+        "I don't know what's more trashy. You or JesusEkber's ganks",
+        "Let me guess... You like to play Death givers",
+        "I have no balls but yet mine are still bigger than yours",
+        "Yo, I need a bit of a break from free beer. I've been super frustrated for 80% of the fights these past couple months, and its making me not enjoy the game." +
+        " I understand we have lots of new players, and the guild wants to train them, but thats just not the environment I wanna be in rn. I need to get the tryhard out of me. " +
+        " I intend on coming back later (if you let me back in). Thanks for the past 10 months I spent here",
         "You act like your colon. You're full of shit.",
         $"PHATED",
         $"Directions"
@@ -278,6 +279,7 @@ namespace DNet_V3_Tutorial
           if (sUserNickname.ToLower() == "phatedfool")
           {
             await RespondAsync($"<@{Context.User.Id}> Holy shit bro. You spent more time spamming me than you do in our ZvZs :rofl: ");
+            KickPhatedPoolFromGuild();
           }
           await RespondAsync($"Your like a Little Cesars pizza. Good enough.");
 
@@ -343,6 +345,10 @@ namespace DNet_V3_Tutorial
       }
     }
 
+    private void KickPhatedPoolFromGuild()
+    {
+
+    }
     [ComponentInteraction("directions")]
     public async Task directionsButton()
     {
@@ -374,112 +380,57 @@ namespace DNet_V3_Tutorial
     public static void WriteToCSV(List<string> UsersList)
     {
       var csv = new StringBuilder();
+      string fileName = @".\Files\PurgeList.csv";
+
       foreach (var item in UsersList)
       {
-        //string line = "Users Reacted";
-        //csv.AppendLine(line);
-        //line = string.Format(item.ToString());
         csv.AppendLine(string.Format(item.ToString()));
       }
 
-
-
-      string fileName = @".\Files\PurgeList.csv";
       if (File.Exists(fileName))
-        System.IO.File.AppendAllText(fileName, csv.ToString());
+      {
+        File.AppendAllText(fileName, csv.ToString());
+      }
       else
-        System.IO.File.WriteAllText(fileName, csv.ToString());
+      {
+        File.WriteAllText(fileName, csv.ToString());
+      }
+        
     }
 
     public async Task ServerScript()
     {
-     await DeferAsync();
-      var ListOfusers = Context.Guild.GetUsersAsync().FirstOrDefaultAsync().Result.ToList();
-      List<string> KickedUsers = new List<string>();
+      await DeferAsync(true);
+      var ListOfCurrentDiscordUsers = Context.Guild.GetUsersAsync().FirstOrDefaultAsync().Result.ToList();
 
-      foreach (var user in ListOfusers)
-      {
-        if (user.RoleIds.Count == 1 && user.JoinedAt > DateTime.Now.AddDays(-14))
-        {
-          if(user.DisplayName != null)
-          {
-            KickedUsers.Add(user.DisplayName.ToString());
-            //user.KickAsync().Wait();
-          }
-          else
-          {
-            KickedUsers.Add(user.ToString());
-          }
-          
-        }
-      }
+      //DataBaseService databaseService = new DataBaseService();
+      //List<Player> ListOfUsersInDatabase = databaseService.GetRegisteredPlayerRoster();
 
-      WriteToCSV(KickedUsers);
-      await FollowupAsync("Members without roles have been purged. (test)");
-      await FollowupWithFileAsync(@".\Files\PurgeList.csv", "PurgeList.csv", "Purge Complete");
+      //var result = ListOfUsersInDatabase.Where(p => !ListOfCurrentDiscordUsers.Any(l => p.PlayerName == l.Nickname));
 
+      //ListOfCurrentUsers
 
+      //DatabaseList
 
-      ////Add All Albion Members Members with new role
-      //LootSplitModule lootSplitModule = new LootSplitModule();
-      ////1127663954701856891 Albion Online role
+      //If user on database list is not on currentuser list delete
 
-      //Dictionary<string, ulong> FreeBeerPlayersList = lootSplitModule.CreateMemberDict(Context);
-      ////var DiscordUsersList = Context.Guild.GetUsersAsync().ToListAsync().Result.ToList();
+      //foreach (var databaseUser in ListOfUsersInDatabase) 
+      //{ 
 
-      //foreach (var player in FreeBeerPlayersList)
-      //{
-      //  if (IsPlayerInFreeBeerGuild(player))
-      //  {
-      //    SocketGuildUser guildUser = (SocketGuildUser)Context.User;
-      //    var user = guildUser.Guild.GetUser(player.Value);
-
-      //    if (user.Roles.Any(r => r.Name == "Albion Online") || user.Roles.Any(r => r.Id == 1127663954701856891))
-      //    {
-
-      //    }
-      //    else
-      //    {
-      //      await user.AddRoleAsync(1127663954701856891);
-      //    }
-
-      //  }
       //}
 
+      //if(ListOfUsersInDatabase.Select(x => x.PlayerName)
+      //   .Intersect(ListOfCurrentDiscordUsers.Select(x => x.Nickname))
+      //   .Any())
+      //{
 
+      //}
 
+      //var list3 = ListOfCurrentDiscordUsers.Except(ListOfUsersInDatabase).ToList();
 
-      //var message = await Context.Channel.GetMessageAsync(1079801885025914910);
-
-      //         var users = message.Reactions.Values;
-      //         IEmote emoji = Emoji.Parse(":thumbsup:");
-      //         RequestOptions options = new RequestOptions();
-
-      //         //var userslist = message.GetReactionUsersAsync(emoji, 300);
-
-      //         var temp = await (message.GetReactionUsersAsync(emoji, 300)).FlattenAsync();
-
-
-      //         List<string> usersreacted = new List<string>();
-      //         string? usernameCleanup = "";
-      //         foreach (var user in temp)
-      //         {
-      //             var userinfo = Context.Guild.GetUser(user.Id);
-      //             if (userinfo != null)
-      //             {
-      //                 usernameCleanup = (userinfo.Nickname != null) ? new PlayerDataLookUps().CleanUpShotCallerName(userinfo.Nickname) : userinfo.Username;
-      //                 usersreacted.Add(usernameCleanup);
-      //             }
-      //             else
-      //             {
-      //                 usersreacted.Add(user.Username);
-      //             }
-
-
-      //         }
-
-      //         WriteToCSV(usersreacted);
-      //         Console.WriteLine("Reactions grabbed");
+      //WriteToCSV(KickedUsers);
+      await FollowupAsync("Script has finished running.", ephemeral: true);
+      //await FollowupWithFileAsync(@".\Files\PurgeList.csv", "PurgeList.csv", "Purge Complete");
     }
 
     public bool IsPlayerInFreeBeerGuild(KeyValuePair<string, ulong> player)

@@ -7,7 +7,6 @@ using InteractionHandlerService;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using SharpLink;
 using System;
 using System.Threading.Tasks;
 using static AlbionOnlineDataParser.AlbionOnlineDataParser;
@@ -19,7 +18,6 @@ namespace FreeBeerBot
   {
     public static DiscordSocketClient _client;
     private DataBaseService dataBaseService;
-    public static LavalinkManager lavalinkManager;
     ulong GuildID = ulong.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("guildID"));
     private bool EnableMusicCommands = bool.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("enableMusic"));
     private bool RegisterCommandsAtReboot = bool.Parse(System.Configuration.ConfigurationManager.AppSettings.Get("registerCommands"));
@@ -60,8 +58,8 @@ namespace FreeBeerBot
       InitializeAlbion24HourDataMarketPricesHistory();
       InitializeAlbionData24DayAveragePrices();
 
-      dataBaseService = new DataBaseService();
-      await dataBaseService.AddSeedingData();
+      //dataBaseService = new DataBaseService();
+      //await dataBaseService.AddSeedingData();
 
       await RunAsync(host);
     }
@@ -83,17 +81,9 @@ namespace FreeBeerBot
       commands.Log += _ => provider.GetRequiredService<ConsoleLogger>().Log(_);
       //_client.ThreadCreated += AuditThreadCreated;
 
-      if (EnableMusicCommands == true)
-      {
-        lavalinkManager = new LavalinkManager(_client, new LavalinkManagerConfig());
-      }
-
       _client.Ready += async () =>
       {
-        if (lavalinkManager != null)
-        {
-          await lavalinkManager.StartAsync();
-        }
+
         if (IsDebug())
         {
 

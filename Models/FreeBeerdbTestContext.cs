@@ -1,4 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Pomelo.EntityFrameworkCore;
+using System;
 
 // Code scaffolded by EF Core assumes nullable reference types (NRTs) are not used or disabled.
 // If you have enabled NRTs for your project, then un-comment the following line:
@@ -11,11 +13,12 @@ namespace DiscordBot.Models
     public FreeBeerdbTestContext()
     {
     }
-
+    
     public FreeBeerdbTestContext(DbContextOptions<FreeBeerdbTestContext> options)
         : base(options)
     {
     }
+
 
     public virtual DbSet<MoneyType> MoneyType { get; set; }
     public virtual DbSet<Player> Player { get; set; }
@@ -29,6 +32,8 @@ namespace DiscordBot.Models
       {
         //#warning To protect potentially sensitive information in your connection string, you should move it out of source code. See http://go.microsoft.com/fwlink/?LinkId=723263 for guidance on storing connection strings.
         optionsBuilder.UseSqlServer("Server=.;Database=FreeBeerdb;Trusted_Connection=True; Encrypt=False;");
+
+        optionsBuilder.UseMySql("YourMariaDBConnectionString", new MySqlServerVersion(new Version(10, 5, 12)));
       }
     }
 

@@ -148,7 +148,7 @@ namespace InteractionHandlerService
 
         SocketGuildUser user = (SocketGuildUser)SocketUser;
 
-        if (!SocketUser.IsBot && await new DataBaseService().CheckPlayerIsExist(SocketUser.Username))
+        if (!SocketUser.IsBot && user.Roles.Any(r => r.Id == 739948841847095387))
         {
           //await CommandModule.CommandModule.Unregister(user.Username.ToString(), user);
           //await new DataBaseService().unre

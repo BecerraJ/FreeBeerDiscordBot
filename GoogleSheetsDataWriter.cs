@@ -470,7 +470,7 @@ namespace GoogleSheetsData
       int i = 0;
       foreach (var users in rowValues)
       {
-        if (users[0].ToString().ToLower() == a_sUserName.ToLower())
+        if (users[0].ToString().ToLower() == a_sUserName.ToLower() && users[0].ToString() != null)
         {
           return users.Last().ToString();
         }
@@ -622,6 +622,7 @@ namespace GoogleSheetsData
                   var dataValidationUpdate = serviceValues.Values.Update(dataValidationRowValues, RegearSheetID, $"{a_sDateToTransfer} Paychex!C{i + 2}:D{i + 2}");
                   dataValidationUpdate.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
                   await dataValidationUpdate.ExecuteAsync();
+                  break;
                 }
                 i++;
               }
